@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1020" viewBox="0 0 1400 1020" role="img"><title>A01 · 客户端 / 提供方边界与数据归属</title><defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#65748b"/></marker><style>text{font-family:Segoe UI,Microsoft YaHei,sans-serif;fill:#283449}.h{font-size:27px;font-weight:650}.t{font-size:19px;font-weight:650}.b{font-size:16px}.s{font-size:14px;fill:#63728a}.e{fill:none;stroke:#65748b;stroke-width:2;marker-end:url(#a)}</style></defs><rect width="1400" height="1020" fill="#f5f7fb"/><text x="40" y="48" class="h">A01 · 客户端 / 提供方边界与数据归属</text><text x="40" y="82" class="b">随比格熊发布，复用一套识别内核；服务可替换，取回后的文稿由 Any2Text 独立管理。</text>
+<rect x="40" y="116" width="640" height="740" rx="12" fill="none" stroke="#adb8ca" stroke-dasharray="6 5"/>
+<text x="60" y="148" class="t">Any2Text 客户端进程</text>
+<rect x="744" y="116" width="616" height="740" rx="12" fill="none" stroke="#adb8ca" stroke-dasharray="6 5"/>
+<text x="764" y="148" class="t">比格熊服务进程 / 默认提供方</text>
+<rect x="72" y="175" width="576" height="90" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="90" y="206" class="t">UI · Tauri / React</text>
+<text x="90" y="235" class="b">导入、任务、校对、成稿、导出；UI 不拼接宿主私有协议。</text>
+<rect x="72" y="310" width="576" height="100" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="90" y="341" class="t">客户端应用层</text>
+<text x="90" y="370" class="b">负责操作与状态展示，保存远端任务引用。</text>
+<text x="90" y="395" class="b">服务端生成状态是权威，本地只缓存展示。</text>
+<path class="e" d="M360 265V305"/>
+<rect x="72" y="535" width="270" height="254" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="90" y="566" class="t">本地文稿与导出</text>
+<text x="90" y="595" class="b">取回原文副本 / 校订修订</text>
+<text x="90" y="620" class="b">候选 / 接受稿 / 导出文件</text>
+<text x="90" y="645" class="b">SQLite + 受管文件</text>
+<text x="90" y="670" class="b">原子落盘后登记修订</text>
+<text x="90" y="695" class="b">已保存成果离线可用</text>
+<text x="90" y="720" class="b">原媒体仅引用，支持重定位</text>
+<path class="e" d="M207 410V530"/>
+<rect x="378" y="460" width="270" height="140" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="396" y="491" class="t">ServiceProvider 端口</text>
+<text x="396" y="520" class="b">能力 / 提交 / 查询 / 控制</text>
+<text x="396" y="545" class="b">prepareInput / readResult</text>
+<text x="396" y="570" class="b">其他生产提供方后置</text>
+<path class="e" d="M513 410V455"/>
+<rect x="378" y="650" width="270" height="139" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="396" y="681" class="t">BigBear 适配器</text>
+<text x="396" y="710" class="b">发现 / 配对 / DTO 归一</text>
+<text x="396" y="735" class="b">任务绑定原提供方身份</text>
+<text x="396" y="760" class="b">不泄漏私有路径或业务 ID</text>
+<path class="e" d="M513 600V645"/>
+<rect x="780" y="650" width="548" height="139" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="798" y="681" class="t">/v1/any2text 薄门面 · 拟新增</text>
+<text x="798" y="710" class="b">沿现有 Bridge 鉴权、授权与版本发现</text>
+<text x="798" y="735" class="b">薄映射到现有内核，结果按合同分页 / 取回</text>
+<path class="e" d="M648 720H775"/>
+<rect x="780" y="435" width="548" height="150" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="798" y="466" class="t">宿主持久任务与成果 · 待 T00 核实挂接</text>
+<text x="798" y="495" class="b">复用任务设施；内存 Bridge JobStore 不作恢复依据</text>
+<text x="798" y="520" class="b">任务 / attempt / 块成果 / 检查点 / 保留期限</text>
+<text x="798" y="545" class="b">宿主只有自己的生成任务与临时成果写入口</text>
+<path class="e" d="M1054 650V590"/>
+<rect x="780" y="200" width="260" height="155" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="798" y="231" class="t">现有 ASR / 媒体</text>
+<text x="798" y="260" class="b">模型 / GPU 调度</text>
+<text x="798" y="285" class="b">PCM 落盘后分块推理</text>
+<text x="798" y="310" class="b">复用常驻模型</text>
+<rect x="1068" y="200" width="260" height="155" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="1086" y="231" class="t">现有文本整理</text>
+<text x="1086" y="260" class="b">分章生成 / 候选</text>
+<text x="1086" y="285" class="b">提示词 / 密钥 / 费用</text>
+<text x="1086" y="310" class="b">复用整理内核</text>
+<path class="e" d="M910 435V360"/>
+<path class="e" d="M1198 435V360"/>
+<rect x="40" y="888" width="1320" height="78" rx="10" fill="#fff5e7" stroke="#d9c7ab"/>
+<text x="58" y="919" class="t">边界不变式</text>
+<text x="58" y="948" class="b">客户端不建第二套 ASR；双方不直接写对方数据库。断开不等于取消，未取回成果仍需连接原提供方。</text>
+<text x="40" y="995" class="s">v0.4 · 2026-11-12 · 拟议设计；不表示服务门面、持久检查点或客户端已实现。</text>
+</svg>

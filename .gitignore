@@ -1,0 +1,6 @@
+/artifacts/
+/docs/design/history/
+/node_modules/
+/.env
+/.env.*
+*.log

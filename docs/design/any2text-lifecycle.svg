@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1090" viewBox="0 0 1400 1090" role="img"><title>A02 · 受理、恢复与成果取回</title><defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#65748b"/></marker><style>text{font-family:Segoe UI,Microsoft YaHei,sans-serif;fill:#283449}.h{font-size:27px;font-weight:650}.t{font-size:19px;font-weight:650}.b{font-size:16px}.s{font-size:14px;fill:#63728a}.e{fill:none;stroke:#65748b;stroke-width:2;marker-end:url(#a)}</style></defs><rect width="1400" height="1090" fill="#f5f7fb"/><text x="40" y="48" class="h">A02 · 受理、恢复与成果取回</text><text x="40" y="82" class="b">生成归宿主；可用文稿归客户端。成功生成与本地保存是两个可分别失败、恢复的阶段。</text>
+<rect x="40" y="130" width="400" height="130" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="58" y="161" class="t">1 · 客户端提交</text>
+<text x="58" y="190" class="b">冻结输入 / 选项 / 校订版本</text>
+<text x="58" y="215" class="b">clientRequestId + 稳定客户端身份</text>
+<text x="58" y="240" class="b">回执丢失：按 requestId 查询</text>
+<rect x="500" y="130" width="400" height="130" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="518" y="161" class="t">2 · 宿主执行</text>
+<text x="518" y="190" class="b">持久任务 + task / attempt / chunk</text>
+<text x="518" y="215" class="b">沿用 PCM 落盘 → 现有分块推理</text>
+<text x="518" y="240" class="b">文件原子发布 → 短事务登记</text>
+<rect x="960" y="130" width="400" height="130" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="978" y="161" class="t">3 · 服务生成成功</text>
+<text x="978" y="190" class="b">结果可取回，保留范围与版本</text>
+<text x="978" y="215" class="b">客户端显示“结果待取回”</text>
+<text x="978" y="240" class="b">取回失败不重做识别 / 整理</text>
+<path class="e" d="M440 195H495"/>
+<path class="e" d="M900 195H955"/>
+<rect x="40" y="330" width="400" height="145" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="58" y="361" class="t">暂停 / 取消</text>
+<text x="58" y="390" class="b">能力声明支持才启用暂停 / 继续</text>
+<text x="58" y="415" class="b">pausing → 当前块提交 → paused</text>
+<text x="58" y="440" class="b">cancelling → 确认停止 → cancelled</text>
+<rect x="500" y="330" width="400" height="145" rx="10" fill="#fff5e7" stroke="#d9c7ab"/>
+<text x="518" y="361" class="t">断开 / 重启 / 状态未知</text>
+<text x="518" y="390" class="b">不取消其他任务、不杀主程序</text>
+<text x="518" y="415" class="b">重连原提供方，先查询旧任务</text>
+<text x="518" y="440" class="b">未知受理不自动重提付费任务</text>
+<rect x="960" y="330" width="400" height="145" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="978" y="361" class="t">4 · 客户端保存</text>
+<text x="978" y="390" class="b">流式取回 → 校验摘要与合同</text>
+<text x="978" y="415" class="b">临时文件原子改名 → 本地登记</text>
+<text x="978" y="440" class="b">登记后才显示“已保存到本工具”</text>
+<path class="e" d="M1160 260V325"/>
+<path class="e" d="M700 260V325"/>
+<path class="e" d="M500 225H470V300H240V325"/>
+<rect x="40" y="545" width="860" height="152" rx="10" fill="#eef1ff" stroke="#a2aee0"/>
+<text x="58" y="576" class="t">恢复执行：仅复用原提供方的有效检查点</text>
+<text x="58" y="605" class="b">暂停继续或失败恢复：核对输入 / 模型 / 参数身份。</text>
+<text x="58" y="630" class="b">取消后的旧 attempt 保持终态；继续创建关联新 attempt。</text>
+<text x="58" y="655" class="b">已提交块可复用，旧 worker 迟到结果不能覆盖新执行。</text>
+<text x="58" y="680" class="b">更换提供方或模型：新结果版本，不能混用 taskId 或检查点。</text>
+<path class="e" d="M240 475V540"/>
+<path class="e" d="M700 475V540"/>
+<rect x="960" y="545" width="400" height="152" rx="10" fill="#fff" stroke="#cad4e1"/>
+<text x="978" y="576" class="t">5 · 离线编辑 / 导出</text>
+<text x="978" y="605" class="b">原文只读，校订 / 候选另存</text>
+<text x="978" y="630" class="b">断开服务后仍可编辑导出</text>
+<text x="978" y="655" class="b">媒体移动仅影响回听，允许重定位</text>
+<text x="978" y="680" class="b">本地落盘确认不自动授权宿主删除</text>
+<path class="e" d="M1160 475V540"/>
+<rect x="40" y="762" width="1320" height="138" rx="10" fill="#fff5e7" stroke="#d9c7ab"/>
+<text x="58" y="793" class="t">跨文件与数据库的崩溃窗口 · 客户端与宿主各自负责</text>
+<text x="58" y="822" class="b">文件发布但未登记：核对同一任务 / 块 / 摘要，幂等补登记或隔离无效文件，不重新生成。</text>
+<text x="58" y="847" class="b">登记存在但文件缺失 / 损坏：标待取回或损坏，不宣称完整成功；保留其他有效成果。</text>
+<text x="58" y="872" class="b">双方各清理自己的受管缓存，保留期限先告知；不删除对方原媒体或业务库。</text>
+<path class="e" d="M470 697V757"/>
+<path class="e" d="M1160 697V757"/>
+<text x="40" y="964" class="b">源码事实：旧同步识别只作 P0 基线；新持久任务与 /v1/any2text 门面是 P1 工作，尚未实现。</text>
+<text x="40" y="1065" class="s">v0.4 · 2026-11-12 · 拟议设计；不表示服务门面、持久检查点或客户端已实现。</text>
+</svg>
