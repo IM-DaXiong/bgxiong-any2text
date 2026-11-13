@@ -1,6 +1,10 @@
 /artifacts/
 /docs/design/history/
 /node_modules/
+/ui/node_modules/
+/ui/dist/
+/src-tauri/target/
+/scripts/__pycache__/
 /.env
 /.env.*
 *.log

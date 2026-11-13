@@ -1,6 +1,8 @@
 # Any2Text 创作辅助客户端开发计划
 
-版本：v0.4。创建及更新日期：2026-11-12，Asia/Shanghai。状态：**T00 已验证本机 Bridge 连通，短样本转写受阻；详见 T00 执行记录**。
+2026-11-14 最新发行决定见 §8.11。Any2Text 随比格熊主程序发行，前文的联合离线 ZIP 记录仅供追溯。
+
+当前版本 v0.4，创建于 2026-11-12，更新于 2026-11-13，Asia/Shanghai。**T00～T06 的本地实现与实机验证已完成。** 发版签名和人工内容确认的状态见 §5.1。
 
 Any2Text 随比格熊一起发布，作为音视频转字幕、原文、口播稿与文学剧本的辅助客户端。默认调用比格熊服务，不复制 ASR、模型管理和文本生成内核。客户端通过可替换的服务接口访问能力，已取回成果由客户端独立保存。1～2 小时媒体仍是首版正式验收对象。
 
@@ -67,7 +69,7 @@ flowchart LR
 - readResult：分页/分块读取规范化结果，或由适配器流式取回成果文件。
 - disconnect：停止当前连接与新提交，不代表任务已取消，不关闭比格熊主程序。
 
-首版比格熊拟新增受认证的 `/v1/any2text` 门面（未实现），包括 capabilities、inputs、jobs、jobs/by-request、任务查询/控制、results 读取/确认。发现沿用既有 Bridge registry，但 registry 存在不代表服务就绪。旧 `/v1/subtitle/recognize` 仅作 P0 基线，不让旧同步接口同时背负新任务合同。
+首版比格熊在 `src-tauri/src/local_bridge/any2text.rs` 注册受认证的 `/v1/any2text` 门面，包括 capabilities、inputs、jobs、jobs/by-request、任务查询与控制、结果读取与确认。客户端通过既有 Bridge registry 发现端口并握手确认就绪。旧 `/v1/subtitle/recognize` 继续服务原有调用方，也是 P0 基线入口。
 
 错误归一为：未连接、版本不匹配、模型未就绪、输入失效、能力不支持、受理未知、取消中、执行失败、结果待取回。技术详情留日志，界面提供可执行动作。
 
@@ -136,11 +138,11 @@ flowchart LR
 
 ## 5. 阶段、双仓协作与文件地图
 
-下列任务均待实施。时间盒为建议上限，不是保证工期；每阶段最多两轮有日志依据的定向修正。到时、真实回归、合同缺口或额度耗尽就停受影响部分，保留成果。阶段内部拆任务不能重置预算。
+下列任务按依赖实施，当前结果见 §5.1。用户于 2026-11-12 要求 T00～T06 全量推进，验收记录随进度补齐。每项仍按实际构建、运行和安装证据记账。
 
 顺序：P0 核实基础 → P1 宿主转写服务补齐并冻结 → P2 客户端接入 → P3 先整理服务验收冻结、再接客户端 → P4 联合交付。两边可以配合，但一轮验收中不能边改基础服务边沿用旧消费者通过结论。
 
-现有文件标“现有”，其余为拟新增。当前目录无 Git 仓库，本轮不初始化、提交、推送。新路径和命令是计划，不能称已存在；T00 核实正式构建、任务和打包入口后回写。
+现有文件标“现有”，其余为拟新增。Any2Text 已在比格熊主仓同级克隆，基线为 `main` 的 `b30c2de`。T00 的正式构建、任务和打包入口见下方接手记录。
 
 ### P0 / T00 接口与运行前提，1～2 个工作日
 
@@ -167,11 +169,37 @@ flowchart LR
 
 续办核对：通过原实例的 Creator MCP `asr.models.list` 读取实时目录，返回本地 Whisper medium 一项。权重已安装，`runtimeReady=false`、`inferenceReady=false`，原因为 `missingEnvironment`。用户随后开始安装 Whisper 运行时，下载进度达到 171,180,032 / 469,512,483 字节时原实例退出。Bridge 转到修图隔离实例 `ai-story-39c5e1ac`，其数据与原安装目标分开。等待原实例恢复安装，核对同一实例的目录和就绪状态后再提交 8 秒样本。
 
+#### 2026-11-12 22:02 +08:00 资源机接手与短样本验收
+
+- `RELEASE-HEAVY-01 / DESKTOP-4OVG8RB`。主仓 Git 根为 `L:\00Dev\bgxiong-ai-story`，从主仓 `origin/main` 的 `32d775dfc0` 读取双机交接清单中的「Any2Text 公开仓与 T00 接手」。同级 `L:\00Dev\bgxiong-any2text` 的 `main` 经 `git pull --ff-only` 核对为 `b30c2ded9eaef37a03b8ae0296f7578cbdfefa73`。
+- Bridge 实例 `ai-story-887d6fe9` 在 `http://127.0.0.1:5977/v1/` 返回健康，具备 `subtitleRest`、`asrSelectionV1`，媒体运行时就绪。Creator MCP `127.0.0.1:19469` 与 Bridge 属于同一 PID `35284`。运行的是隔离开发 EXE `L:\00Dev\bgxiong-ai-story\logs\subtitle-format-live\delivery-target\debug\bgxiong-ai-story-tauri.exe`，Windows 产品版本 `0.6.0`，SHA-256 `5d4de63a93e1a8297d72a293eb6da7d2a53fcd048aa188b1a0a92eacbd63aebd`。
+- Creator MCP `asr.models.list` 的原始回执为 `L:\00Dev\bgxiong-any2text\artifacts\t00\asr-models-list-1b278240aec444fe9f1dba0451d4c163.json`。目录返回四个本地配置。Whisper-tiny 与 Whisper-large-v3 均已安装、`runtimeReady=true`，支持 `zh` 和段级时间戳。提交前 `inferenceReady=false`，宿主在处理请求时按显式配置加载。Qwen3 当时 `runtimeReady=false`，FireRed 缺模块。两次请求均由探针显式传入本机配置 ID。
+- 首次以 Whisper-tiny（`45a9a339-8af4-4e97-a6db-e952cba92ca7`）提交原 8.000 秒 `ref8s.wav`，服务耗时 7,738 ms。顶层 `code=0`，但逐文件回执有错误，探针退出码为 1。宿主诊断 `ASR_TIMED_TEXT_INVALID` 的结构错误中，最后一段和最后一个时间单元结束于 8,320 ms，超出样本时长。原始 `response.json` 与 `host-asr-diagnostic.json` 均保留在 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-71fa81fb69e547f4b65c450d95d1ba6a\`，这次未生成验收文件。
+- 用同一探针和样本，显式改选 Whisper-large-v3（`e9ffec83-6609-47b1-a168-01c39166647b`），请求 `zh`、`segmentTimed`、`srtOnly`。宿主日志显示该旧字幕入口内部按 `unitTimed` 执行，再编排 SRT。探针退出码 0，客户端请求耗时 **11,322 ms**，服务耗时 **11,301 ms**。请求、健康回执及 `response.json` 随成果保存在同一次运行目录。
+  - 原文 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-f1fe1ff43b244dacbfa9ca6193db47b9\transcript.txt`。读回 74 字节、三行中文，非空且与回执的 `fullText` 一致。
+  - 字幕 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-f1fe1ff43b244dacbfa9ca6193db47b9\subtitles.srt`。读回 208 字节，FFprobe 识别为 SubRip。四条序号连续、文本非空，时间正向且互不重叠，覆盖区间在 00:00:00,300 至 00:00:08,000 之间，未超出素材时长。
+- **隔离开发版 8 秒真实转写与落盘验收通过。** 十分钟吞吐、安装版和两小时恢复在这一轮未运行。
+- 主仓源码核对：日常开发运行入口为 `scripts/dev-launch-current.ps1`，0.6.1113 正式打包入口为 `scripts/build-installer-full.ps1`。任务写入由 `ai_task_scheduler.rs` 的 `AiTaskScheduler::submit` 调用 `infrastructure/persistence/sqlite/ai_task_ops_sqlite.rs` 的 `insert_queued` / `insert_running`。`main.rs` 初始化调度器并注册 checkpoint sink，启动 `async_media_resume::boot::resume_all_interrupted_async_media_jobs`。旧字幕 Bridge 的 `JobStore` 仍在内存。P1 需为 Any2Text 增加对应的任务类型与恢复分派，旧字幕入口无可直接沿用的转写检查点。
+
+#### 2026-11-12 22:25–22:27 +08:00 安装版复验
+
+- 已切换为本机安装目录运行的 `K:\bgxiong-ai-story\bgxiong-ai-story.exe`，Windows 文件产品版本 `0.6.0`，SHA-256 `f34f147a6de1536d7aa82ac36403d1bdc7c71bf4edefdc95077fbf80bb2dbba7`。Bridge `ai-story-b50f04b8` 在 `http://127.0.0.1:9606/v1/` 健康，和 `127.0.0.1:18451` 的 Creator MCP 同属 PID `28800`。重新调用 `asr.models.list`，回执保存在 `L:\00Dev\bgxiong-any2text\artifacts\t00\asr-models-list-4e5b2e9909ee42df9dbb13bff6b794cf.json`。两套 Whisper 配置均已安装、运行时就绪，支持中文和段级时间戳，提交前均未预加载。
+- 同一探针和 8.000 秒样本，显式指定 Whisper-tiny（`45a9a339-8af4-4e97-a6db-e952cba92ca7`）复现同一结构错误。最后一段及最后一个时间单元仍结束于 8,320 ms。服务耗时 5,338 ms，探针退出码 1。`response.json` 和 `host-asr-diagnostic.json` 保存在 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-7b3ca5a75ac74daab999cf8bc52c5cc6\`。
+- 同一安装版实例显式指定 Whisper-large-v3（`e9ffec83-6609-47b1-a168-01c39166647b`）对照通过，探针退出码 0，请求耗时 **9,179 ms**，服务耗时 **9,158 ms**。原文 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-c12572656d434fa785d0afb092febe4a\transcript.txt` 读回 74 字节，非空并与回执 `fullText` 一致。字幕 `L:\00Dev\bgxiong-any2text\artifacts\t00\any2text-t00-c12572656d434fa785d0afb092febe4a\subtitles.srt` 读回 208 字节，FFprobe 识别为 SubRip，4 条均有文本且时间有序、互不重叠，末条结束于 8,000 ms。
+- **安装版 8 秒转写和落盘验收通过（Whisper-large-v3），Whisper-tiny 的时间越界已跨实例复现。** 十分钟吞吐和两小时恢复待验。
+
+#### 2026-11-12 十分钟吞吐基线
+
+- 资源机 Intel Core i9-10980XE、约 125.2 GiB RAM、RTX 4090 24 GiB、驱动 621.14。使用同一安装版 Bridge `ai-story-b50f04b8`，从实时 Creator MCP 目录显式选择 Whisper-large-v3 `e9ffec83-6609-47b1-a168-01c39166647b`，`zh`、`segmentTimed`、`srtOnly`。原 `ref8s.wav` 加 2 秒尾静音后循环 60 次，得到 600.000 秒、19,200,078 字节的 PCM 16 kHz 单声道 16 bit WAV。模型推理精度取宿主配置，探针无精度覆盖。
+- 原文和 320 条 SRT 字幕已落盘，最后一条结束于 598.000 秒。请求 27,388 ms，服务 27,372 ms，端到端服务耗时 / 源时长约 0.0456。2 秒采样记录宿主峰值工作集 246,206,464 字节、Whisper 进程峰值工作集 499,748,864 字节、峰值私有内存 5,163,036,672 字节。显卡整卡占用 4,564～8,449 MiB，系统临时盘空闲量采样差约 33.8 MB。整卡和整盘采样包含同机活动。
+- 原始请求、回执、目录、媒体信息、结果及采样保存在 `L:\00Dev\bgxiong-any2text\artifacts\t00\throughput-9747684f8c6f43ae826cc23d96773ba2\`。重复样本用于吞吐与边界复现，真实长节目的听辨质量待验。
+- 首次两小时恢复验收预算冻结为墙钟 20 分钟、宿主和模型新增私有内存合计 8 GiB、整卡占用较基线增加 8 GiB、测试 WAV 的宿主管理盘新增 1 GiB、首次提交块 60 秒。预算应用于本机合成基线复验，视频输入的原始 staging 副本另按实际文件大小记账。
+
 ### P1 / T01～T02 比格熊转写服务，3～5 个工作日
 
-T01 合同与门面：本仓拟新增 `contracts/v1/service-provider.schema.json`；宿主拟新增 `src-tauri/src/local_bridge/http/routes/any2text.rs`，修改现有 `routes/mod.rs`、`http/server.rs`、`discovery.rs`。同一合同版本映射能力、输入、任务、结果，宿主私有 DTO 不外泄。两仓消费固定版本的合同副本并校验摘要，不建通用 SDK 发行体系。
+T01 合同与门面落在本仓 `contracts/v1/service-provider.schema.json`、主仓 `contracts/any2text/v1/service-provider.schema.json` 和 `src-tauri/src/local_bridge/any2text.rs`，由现有 `http/server.rs`、`app_state.rs`、`discovery.rs` 装配。两仓校验固定合同版本和摘要，能力、输入、任务、结果均通过公共 DTO。
 
-T02 检查点：修改宿主现有 `src-tauri/src/asr/service.rs`，拟新增 `asr/execution_checkpoint.rs` 并在现有 `asr/mod.rs` 登记。持久任务挂接文件/符号由 T00 核实后补齐；沿用 chunking、resident 和媒体内核，不改模型协议。新增持久字段按主项目迁移规范处理，禁止临时 ALTER 用户原库。
+T02 检查点由宿主 `src-tauri/src/asr/execution_checkpoint.rs` 持久化，现有 `asr/service.rs` 负责提交、核验与恢复。进度写入现有 `ai_tasks` 的任务载荷，`async_media_resume/mod.rs` 保护可恢复记录，Bridge 挂载后恢复待处理任务。沿用 chunking、resident、媒体内核和既有模型协议。
 
 闭包：路由声明 → Router → 版本/能力公告 → 身份与授权 → 持久任务 → worker → 结果读取/确认。真实装配入口验收；内部函数通过不能证明路由可用。结果必须有可取回的结构化字幕，不能仅有宿主临时路径。
 
@@ -179,7 +207,7 @@ T02 检查点：修改宿主现有 `src-tauri/src/asr/service.rs`，拟新增 `a
 
 ### P2 / T03 客户端可用转写，3～5 个工作日
 
-本仓拟新增 `src-tauri/src/provider.rs`、`providers/mod.rs`、`providers/bigbear.rs`、`application.rs`、`workspace.rs`、`export.rs`、`lib.rs`（IPC 装配），以及 `ui/src/api/any2text.ts`、`ui/src/features/{import,tasks,transcript,export}/`。采用 Tauri/React/Rust 普通模块，构建清单实施时建立，不创建六套独立 crate。
+本仓 `src-tauri/src/{provider,application,workspace,export,lib}.rs` 定义端口、用例、文稿存储、导出和 IPC 装配。`providers/bigbear.rs` 封装比格熊协议，`ui/src/main.tsx`、`ui/src/api/any2text.ts` 实现五页工作区及其调用。客户端采用 Tauri、React、Rust 和 SQLite。
 
 后端适配、取回、短事务保存、离线导出；前端不自行拼宿主协议。校订保存使用 expectedRevision，轮询不打断焦点/输入法。独立窗口可调用冻结服务，回听、校订、导出；比格熊断开后已落盘文稿继续工作。此阶段不改服务或模型，缺口停止并明确最小服务修正。
 
@@ -187,9 +215,9 @@ T02 检查点：修改宿主现有 `src-tauri/src/asr/service.rs`，拟新增 `a
 
 ### P3 / T04～T05 口播与文学剧本，3～5 个工作日
 
-T04 先服务：门面增加 organize，调用现有 `src-tauri/src/text_organize/service.rs`；必要恢复逻辑拟放 `text_organize/checkpoint.rs` 并在现有 `text_organize/mod.rs` 登记。只补现有长文候选能力的缺口，沿用模型/提示词/费用管理，旧流程回归后冻结能力与合同。
+T04 门面的整理入口在主仓 `src-tauri/src/local_bridge/any2text_organize.rs`，在该处冻结来源、管理分章文件与覆盖校验，调用现有 `src-tauri/src/text_organize/service.rs` 的模型、分章、提示词和计费入口。
 
-T05 后客户端：本仓 providers/bigbear.rs 映射 organize，拟新增 `ui/src/features/organize/`，workspace.rs 保存来源与候选。先落盘再允许接受；人工编辑重新标未接受；原文更新使旧候选待核对。
+T05 本仓的 `providers/bigbear.rs` 映射 organize，`ui/src/main.tsx` 提供整理页面，`workspace.rs` 保存来源与候选。稿件落盘后可接受，编辑后需重新接受，来源更新后旧候选进入待核对状态。
 
 实物：两个可导出稿件类型、来源回听、接受/编辑和失败章节恢复。复用 P1/P2 有效原文，不重复识别两小时音频。结构不合法/截断与有意缩写分开，不能用文风门禁拒收可用稿件。
 
@@ -202,6 +230,29 @@ T05 后客户端：本仓 providers/bigbear.rs 映射 organize，拟新增 `ui/s
 验收：兼容版本可连接，不兼容时禁止新提交但旧文稿可用；服务未启动时按用户动作启动已安装比格熊；关闭辅助窗口不误杀主程序；比格熊退出显示断开/恢复；其他任务不受影响；切换提供方不错误转发旧任务；停用/卸载比格熊后已取回文本仍可编辑导出。
 
 发送到比格熊创作是可选交付扩展，未接通时本地导出仍完整。接入前核实既有 `ui/src/features/text-workbench-input/TextWorkbenchInputActions.tsx` 与 `WorkbenchOperationPort`，用户选定对象后按宿主入口导入候选，不直接写库，不采用旧场次/故事板主线。
+
+### 5.1 2026-11-13 双仓实施与验证记录
+
+- T01 门面已在隔离开发宿主实际启动。`/v1/any2text` 使用 Bridge 本机配对凭据和独立短期会话，服务实例身份与持久服务身份分离。请求去重、按请求 ID 查询、会话续期及跨客户端拒绝访问实测通过。首轮 MP4/AAC 发现解码比容器多 21 ms，原始证据见 `artifacts/live-acceptance/short-09684a8318134099a0099b6501ef9442/`。新版按源时长限制归一化音频，WAV、MP3、MP4/AAC 均通过时间轴和摘要校验，原始证据见 `artifacts/live-acceptance/bridge-final-b6528ce774024fda987829ebde7402c0/results.json`。
+- T01 完整格式复验在实例 `ai-story-fc547860` 通过。损坏文件、无音轨、不可用模型和纯数字静音按不同结果返回。双音轨 MP4 按请求选择第二轨。测试回执见 `artifacts/live-acceptance/formats-final-bd736e26c9af4b3a929c392f36934c10/results.json`。数字静音按 PCM 样本判定，低音量的非零样本仍交给用户选中的模型。
+- T01/T02 最终字幕宿主 `ai-story-8dd838dd` 再次通过首批格式、选轨、模型拒绝、跨客户端取消拒绝及提交回执丢失后的按请求 ID 找回。旧字幕入口同一实例实际落盘原文与四条字幕，末条止于 8.000 秒。证据在 `artifacts/live-acceptance/final-regression-80370dcfe3e740a18ffb8a57de11dc2d/`。
+- T01 兼容目标用实例 `ai-story-12c88021` 和同一显式模型实测。MOV/H.264/AAC、MKV/H.264/AAC、AVI/MPEG-4/MP3、WebM/VP8/Opus、M4A/AAC、AAC/ADTS、FLAC、OGG/Vorbis 的样本均成功取回有效字幕，证据见 `artifacts/live-acceptance/compatibility-03b1164eb508446082a8ec7aa568961a/results.json`。
+- T02 两小时样本由 `ref8s.wav` 加尾静音后循环构造，PCM 时长 7,200.000 秒。新版用本机 Whisper-large-v3 通过暂停、取消、更换 attempt 续跑、强制冷重启和进度登记断点。测试在隔离库将已提交游标回退到 0，保留分块文件。Bridge 从 `ai-story-0c4261ca` 重启到 `ai-story-6ec70d1c`，持久服务 ID 和 attempt 均一致，复用了 4 个旧分块且文件修改时间一致。最终 2,221 段，末段结束于 7,198.008 秒。首块 22.265 秒，取消确认 0.156 秒。352.1 秒采样中，宿主进程树峰值私有内存 5,447,102,464 字节，整卡 VRAM 2,289～6,214 MiB，宿主管理目录新增 461,347,919 字节，各项均在冻结预算内。证据见 `artifacts/live-acceptance/long-cold-restart-27af036966a54ab1acbad810f81d85d8/`。
+- T02 自然中文实录取自 [LibriVox《朝花夕拾》](https://librivox.org/chao-hua-si-she-by-lu-xun/)，将 Jing Li 的朗读从起点裁为 7,200 秒。安装版首轮提交了前 36 个分块，第 37 块的最后字幕结束于该块内 59.820 秒，超过 30 秒的源范围，原始回包已保存在 `artifacts/live-acceptance/host-data/logs/bgxiong-ai-story-asr-result-8174b500-5e5e-4890-881b-94eb05a4d075.json`。同一模型在该段按两个 15 秒区间独立解码均通过时间轴校验，见 `artifacts/live-acceptance/natural-mandarin/timestamp-witness/results.json`。宿主按源采样帧缩小失败区间，使用相同冻结模型与选项有限重试。
+- T02 同一任务从 18 分钟续跑至 67 分钟，已提交 134 个分块。第 135 块的末字幕在源尾多出 7 ms，按两个更短区间复现 4 ms 和 2 ms 的末尾偏差。原始回包 `artifacts/live-acceptance/host-data/logs/bgxiong-ai-story-asr-result-a40eda1f-eb3a-4962-8216-b71c058c7c13.json`。宿主按 Whisper 的原生 20 ms 时间步长，只将一格内且起点在有效源区间的终点收敛到最后一个样本。较大的越界仍走同模型重试和错误路径。定向测试 4 项通过，见 `artifacts/whisper-timing-tests.log`。
+- T02/T03 最终在 `ai-story-8dd838dd` 从 67 分钟恢复，沿用 Whisper-large-v3 `e9ffec83-6609-47b1-a168-01c39166647b`。前 134 块的摘要和修改时间一致，最后一次恢复的 ASR 执行耗时 170.658 秒。桌面实际取回并导出原文 81,028 字节、SRT 154,082 字节。独立读回确认 2,060 条字幕均有文字、编号连续、时间有序无重叠，最后一条止于 01:59:59.967。原文、SRT、修订导出与复用清单在 `artifacts/live-acceptance/desktop-natural-clock-49b12c825d8649fea8d1a54991032a65/`。开头、跨块、中段、末段四处用维基文库对应章节做汉字抽样对齐，相似度 90.3～94.7%。片段和各自文本来源见 `artifacts/live-acceptance/natural-mandarin/review-windows/results.json`，该数值只描述四处文本抽样。
+- T03 安装版 Any2Text 通过真实 Bridge 导入、显式选型、提交、取回、音频回听、波形、搜索和校订。重复取回保持文稿修订历史，模拟并发保存冲突后界面仍保留未保存内容。已读回离线 SRT、VTT、TXT 和 JSON，四种宽度的五页检查通过。在线验证记录在 `artifacts/live-acceptance/desktop-matching-380d644c4dd74791b9d040c1f4c54987/results.json`。离线复开与候选编辑撤销接受的记录在 `artifacts/live-acceptance/offline-a8d13f8eab8241ff89fbd0cb133b96e1/results.json`。
+- T03 实际桌面从实时目录展示多个配置。选择不可用配置时显示原因并阻止开始转写，显式切换至就绪配置后恢复提交，见 `artifacts/live-acceptance/model-selection-7925d12bb355402aa8288e01ea5afb58/results.json`。
+- T04/T05 已接入比格熊本地文本模型、带来源的冻结校订和分章检查点。安装版通过本地 Qwen3-4B 生成、取回、接受并导出忠实口播稿和创作文学剧本，两份稿件均有 TXT 和 Markdown，见 `artifacts/live-acceptance/desktop-matching-380d644c4dd74791b9d040c1f4c54987/`。文学剧本首轮纯创作段落使用空来源，宿主现以 `【新增/推测】` 标注并持续校验输入段落覆盖。既有同步字幕路由在同一宿主回归通过，见 `artifacts/live-acceptance/legacy-subtitle/any2text-t00-8bf397c022594142b83244dec5c69e6f/`。
+- T04 分章恢复用隔离宿主 `ai-story-58f426d8` 和本机 Qwen3.8-27B Q4 配置 `01f8f638-6162-474f-b050-86829e82de02`。已提交首章（45 秒、12 个输入段中的 5 个）后暂停，注入第二章回执未知状态。恢复原 attempt 返回 `vendorFailed`，显式续跑创建新 attempt，取回全部三章并核对 12 个输入段全部覆盖。首章摘要和修改时间一致。完整执行日志、摘要与结果见 `artifacts/live-acceptance/organize-sections-73c47da75e1f46d3b795508ae7c853a3/`。
+- T05 独立客户端离线编辑已接受稿件后重新接受，校订来源更新后旧候选显示「来源待核对」，导出原候选被拒绝。证据见 `artifacts/live-acceptance/offline-source-change-29b5fab5d275422aa419ce6145165db7/results.json`。
+- T04/T05 最终读回发现创作模型会给新增角色和场景附上原文 ID。宿主保留关联来源，并将含有无法与所引原文逐字匹配内容的创作段落标为「新增/推测」。校验比较文字和数字，供编辑复核。实例 `ai-story-12c88021` 重新生成、接受和导出两类稿件。文学剧本的三个新增段落均保留标记，成品与验证记录见 `artifacts/live-acceptance/desktop-draft-origin-eccde16374fd4b2790e7f664e2ef0440/`。
+- T06 正式入口的输入预检在主仓更新至 `8a6fee6af3` 后通过 28 项，详见 `L:\00Dev\bgxiong-ai-story\logs\release-inputs-20261113-012346-50992\result.json`。联合 NSIS 验证包成功安装两个程序并建立本包专属 Any2Text 快捷方式，生产数据指针摘要一致，见 `artifacts/live-acceptance/joint-final-install.json`。安装版从客户端按按钮拉起同目录宿主。关闭辅助窗口后宿主仍可用，宿主退出显示断开并在同一服务重启后恢复，见 `artifacts/live-acceptance/joint-lifecycle-5177d0be96ae4d97a0e938cafb5b772e/results.json`。真实桌面连接旧 Bridge 时阻止提交。进程外替身验证旧任务不会转发且离线文稿可继续读写。
+- T06 隔离联合包更新安装与卸载均退出 0。卸载移除两款程序和专属快捷方式，生产数据指针摘要一致。随后用独立 Any2Text 从离线工作区重新读回原文、校订及已接受稿件并完成导出。卸载和离线证据见 `artifacts/live-acceptance/joint-final-lifecycle-5fe8db298bc2470585e2bd0c5d0637ff/`。
+- T06 含最终字幕实现的隔离验证包 0.6.1118 完成更新安装、启动、断线恢复、卸载、卸载后离线重开与来源变更待核对。安装及内容摘要 `artifacts/live-acceptance/joint-terminal-clock-install.json`，生命周期和卸载 `artifacts/live-acceptance/joint-terminal-clock-lifecycle-5d73b54022814662b40fecd0e9d93977/`。
+- T06 最终联合验证包 `L:\00Dev\bgxiong-ai-story\src-tauri\target-any2text-nsis-validation\debug\bundle\nsis\bgxiong-any2text-joint-validation_0.6.1119_x64-setup.exe` 的 SHA-256 为 `77ec83ba7b4337341f2910b630e4d616ee4d34fe90d158135dc1fe04d2d57b36`。安装摘要见 `artifacts/live-acceptance/joint-draft-origin-install.json`。两个程序均落盘，客户端能启动宿主并握手，关闭客户端后宿主继续运行，宿主退出与重启分别显示断开与恢复。卸载退出 0，两个程序和专属快捷方式已移除，独立客户端从原工作区离线重开、编辑并导出通过。证据见 `artifacts/live-acceptance/joint-draft-origin-lifecycle-5237289ab2644aef8d9ea45ac8079fc4/`。
+- 两仓合同摘要一致，PowerShell 与 Python 验证脚本解析通过。客户端的进程外提供方替换测试和宿主分块定向测试（8 项）通过。主仓既有 ASR 隔离套件受其锁文件漂移及引用的 `asr/adapters/whisper/execution.rs` 缺失影响，分块定向验证直接编译当前生产分块模块。
+- 本轮交付本地未签名联合验证包。正式发行签名和发布记为 `NOT_RUN`。人工听辨和剧本改编意图确认同为 `NOT_RUN`，四处朗读样本、对应来源和成品稿件已备齐。
 
 ## 6. 验收档位、预算与生效
 
@@ -263,3 +314,130 @@ v0.3 审核使用 BGX 5.1.0（§7.1～7.2）；v0.4 使用本机已安装 BGX 6.
 结论：计划与设计审核完成，业务状态仍为待实施；下一步仍是 T00，尤其是服务/模型基线及宿主持久入口的真实挂接点。不得跳过 T00，以图纸或原型的通过替代该证据。查看本次 UI 只需打开或刷新 HTML；没有更新产品安装包。
 
 后续变更沿本 PLAN、UI 规范及原 SVG/HTML 原位修订，递增设计版本并重出受影响预览。v0.2 基线与 v0.3 计划快照已被 v0.4 替代，保留于本机历史归档。
+
+## 8. 大素材导入、比格熊皮肤与音乐剧转写修复
+
+2026-11-13，Asia/Shanghai。下文 §8.1～8.4 保留原排查和修复方案，实际实施与验收见 §8.5。基线为 Any2Text `b30c2de`、比格熊 `3d088e7891` 加现场工作树改动，两仓已有开发改动须保留。旧的两小时验收使用 Whisper-large-v3 和循环合成语音样本，见 §5.1。本节补上 Qwen3-ASR 与长配乐素材的验收。
+
+### 8.1 T07 · 选中文件后立即显示导入状态
+
+**现状与原因。** `ui/src/main.tsx:77` 的 `busy` 用于禁用按钮和暂停轮询，`main.tsx:122`、`:254` 的选文件与拖入路径共用导入函数，素材面板没有呈现导入中的状态。文件对话框返回后，`src-tauri/src/application.rs:117` 等待整个导入返回才登记项目。`src-tauri/src/providers/bigbear.rs:220` 首先流式读完整个文件计算 SHA-256，随后回到文件开头流式发送给比格熊。宿主 `src-tauri/src/local_bridge/any2text.rs:682` 接收时再次校验摘要、写盘、探测时长和音轨，最后给回执。每个阶段都可能让等待明显变长。现场未抓取导入首帧和各阶段耗时，具体哪一阶段在该机耗时最多待测。
+
+**客户端改动。** 在 `main.tsx` 为选文件和拖入共用的入口建立独立导入状态，选中合法路径后先渲染「正在导入」和可访问的进度区域，再让 WebView 完成绘制后启动 IPC。对话框取消直接返回。导入期间拒绝重复点击或拖入，当前项目继续可见，失败后恢复按钮并在素材区显示原因。用 `finally` 收尾，忽略旧导入回调，避免迟到事件覆盖新导入状态。项目登记成功后切到新素材并显示时长和音轨。
+
+**阶段与文件。** `ui/src/api/any2text.ts`、`src-tauri/src/application.rs` 用每次调用独立的 IPC 进度通道传递阶段。`src-tauri/src/provider.rs`、`providers/bigbear.rs` 上报「校验文件」「传送素材」「等待比格熊检查」。前两段可按已处理字节显示分段进度，传送进度表示客户端已读入请求流的字节。等待宿主回执用不定进度，收到匹配摘要的回执且项目写入成功后才完成。`ui/src/style.css` 提供与皮肤一致的进度样式。对已登记素材提前返回回执的情况，进度直接收尾。延用现有流式传输、限额和摘要检查。单独记录文件哈希、请求流、服务回执和项目登记耗时。300 秒请求总超时与 16 GiB 上限的匹配性纳入大文件实测；若证实正常传输会撞限，再针对导入拆出连接、停滞与总时限，避免影响查询和提交。
+
+**验收。** 扩展 `scripts/verify-desktop.py`，走真实选择入口或模拟对话框返回并走同一 `importPath`。把宿主回执人为延迟，断言耗时调用发出前导入状态已绘制，等待期间界面可响应。用现场约 94.7 MB 的 MP3 和一份多音轨大 MP4 验证选择与拖入、阶段前进、项目登记、音轨选择。覆盖取消对话框、重复拖入、断开服务、错误格式或无音轨、磁盘不足以及失败后重试。失败路径验未创建客户端半成品项目、之前的项目仍可用、服务端临时文件可清理。性能证据记录首帧与阶段耗时。
+
+### 8.2 T08 · 复用比格熊五套皮肤，连接后跟随
+
+**现状。** Any2Text 的 `ui/src/style.css:1` 依赖系统深浅色和自定义配色。比格熊 `ui/src/theme/themeRegistry.ts:9` 有深色、浅色、樱花粉、海天蓝、清新绿五个主题。对应颜色定义在比格熊 `ui/src/index.css` 的 `:root` 和四个 `[data-theme]`，`ThemeProvider.tsx` 把偏好保存在比格熊自己的 WebView。两个应用使用不同 WebView 存储，当前 Any2Text 连接能力回执也没有主题字段。
+
+**复制与复用。** 由比格熊现有注册表和 CSS 导出可版本化的最小皮肤资源，包含五个 ID、显示名、`color-scheme` 和工作台实际使用的颜色变量。Any2Text 随包带上同一份资源，使用原色值映射侧栏、顶栏、面板、输入控件、主按钮、选中与焦点、错误、导入进度、字幕及波形。主程序全站样式和页面组件继续由比格熊管理。文件地图为比格熊 `ui/src/theme/themeRegistry.ts`、`ui/src/index.css` 和定向导出检查，Any2Text `ui/index.html`、`ui/src/main.tsx`、`ui/src/style.css` 及随包皮肤资源。开发和联合打包核对资源来源版本及五套值一致，避免两边各手工维护一份色值。
+
+**连接与切换。** 建议顶栏提供皮肤选择，默认「跟随比格熊」，也可手动选同样五套。比格熊 `ThemeProvider.tsx` 初始化及换肤时经窄 IPC 发布当前主题 ID 到宿主；`src-tauri/src/main.rs` 注册 IPC，`src-tauri/src/local_bridge/any2text.rs` 提供认证只读查询。Any2Text `providers/bigbear.rs` 和 `application.rs` 在连接成功时读取一次，随后在已连接期间独立低频刷新，导入或转写等待时仍可更新。查询作为可选扩展，保持现有必需 schema 的摘要和握手逻辑，避免单边升级让转写失联。只接受本地已知 ID，主题查询暂不可用时继续用上次有效主题。首次离线启动使用比格熊深色默认值，后续从客户端自身缓存恢复，首屏绘制前应用。切回跟随时立即刷新。手动选择只影响本窗口所在的 Any2Text 应用。断开后仍可切换并使用缓存。延迟响应按连接实例及选择模式核对，避免覆盖后来选中的皮肤。
+
+**验收。** 五套主题逐一核对主程序关键色值及 Any2Text 五个工作页、连接面板、下拉、错误与进度状态的可读性。用两个实窗验证首次连接立即跟随、比格熊换肤后下次刷新同步、手动选择和切回、断开重连、重启首帧、旧 Bridge 缺查询接口时仍可正常连接和转写。取比格熊五套主题和 Any2Text 对应画面的同屏截图，检查窄窗及键盘切换。
+
+### 8.3 T09 · 音乐剧长音频转写及原任务续跑
+
+**现场证据。** 只读查询 `%LOCALAPPDATA%/com.bgxiong.any2text/workspace.sqlite3`，对上 4,735,095 ms 的 MP3，约 **1:18:55**，单音轨。请求 `b016278b-146f-4d1c-820a-7f2eb2c8bf8e`，宿主任务 ID 前缀 `any2text-71122143`，选用 `asr-offline:qwen3_asr`、运行时 `2.0.3`、中文和段级时间戳。状态为 `failed`，已提交 **89,106 ms**。比格熊 `data/logs/bgxiong-ai-story-2026-11-13-095745.log` 第 3493、3516、3799～3851 行显示，模型已就绪，音频被规划为 163 块，前三块成功并落盘。第 4 块约 **01:29.106–01:59.106**，10:23:35～10:23:36（北京时间）返回 `InvalidOutput / Requested timing absent`。三份检查点及 PCM 缓存仍在。只读检查第 4 块 PCM，480,000 个样本中有 479,854 个非零，确实有声音信号。用户说明全剧有大量配乐，可能连续几分钟至十几分钟没有对白。第 4 块里是否有可辨认的词、模型是否仅吐出标点或注记、对齐器具体返回形态，仍须现场回听和短段复跑确认。该次任务的报错发生在分块输出校验，源文件已登记，模型已加载。
+
+**错误为何终止任务。** `runtimes/asr/qwen3-asr/engine.py:38` 将识别文本与对齐单元交给 `runtimes/asr/_shared/protocol.py:68`。有文本且要求时间戳，但无有效时间单元时，协议抛出 `invalidOutput`。`runtimes/asr/_shared/server.py:166` 在推理报错后停止 worker。宿主 `src-tauri/src/asr/sidecar/manager.rs:323` 解出了结构化错误，但在 `:341` 转成通用字符串。字符串再由 `asr/errors.rs:9` 归为 `InternalError`，导致当前工作树 `asr/service.rs:564` 已有的按 `InvalidOutput` 拆小重试逻辑接不到错误。保留错误码之后还要处理已停掉的 worker，否则短段重试会拿到失效的 resident。现场日志未出现拆小重试记录。
+
+**T09a · 打通错误和进程恢复。** 修改比格熊 `asr/sidecar/manager.rs`、`asr/adapters/sidecar.rs`、`asr/resident_manager.rs` 与 `asr/adapters/resident_ops.rs` 的推理调用，保留结构化错误码到分块层，诊断保留任务、attempt、块序、源时间区间和错误类别。按 sidecar 当前停止语义对失效世代确认退出并使旧 pin 失效；恢复调用在原参数、取消令牌和剩余预算内重新准备同一冻结配置，复用 `asr/service.rs` 已有的有界拆分。优先已有静音边界，否则在子段中点切开。子段以原始源偏移合并，通过时间验证后才写完整父块的检查点。取消、超时、进程退出未确认等错误按原生命周期处理。比格熊 `local_bridge/any2text.rs` 用已有 `error.code/message` 表达可操作的故障，例如「第 4 段无法生成时间戳（01:29–01:59）」；Any2Text `main.tsx` 在原任务卡显示时间和可用操作。无需先改任务 schema。
+
+**T09b · 按音乐剧真实内容处理无对白。** 先截取故障区间及前后相邻片段，在隔离任务中回听、记录有词/无词标注，并用同一冻结模型记录去敏后的输出类别、有效单元数及耗时。空文本且无有效对齐可以记为 `noSpeech`，通过块校验并提交进度。纯配乐和器乐经证据核实后使用同样的空块语义，字幕时间轴自然留白；带可辨认歌词的演唱与对白都纳入转写验收。若查实该模型只返回空白、纯标点或明确的非语言占位符，给 Qwen3 适配层补针对该输出的归类及测试。保留共享协议对真正文字缺时间戳、反向区间和越界的校验。配乐有能量，当前 FFmpeg 静音切点和数字静音快路径无法鉴别有没有人声。对普通文字无对齐或无法判断的片段，先执行同模型短段重试；若仍无有效结果，任务保留检查点及准确失败区间，供人工核对并决定重试或主动选另一配置。若短段实测显示模型持续给无词配乐生成普通文字，再依据真实样本评估可区分对白与演唱的无词判定，门槛需用对白、轻声、音乐下人声和演唱反例验证。避免用音量阈值或普遍跳过对齐错误来判定无字幕。
+
+**T09c · 续跑及版本边界。** 在 `local_bridge/any2text.rs:1055` 复用「继续未完成部分」，保留原任务和原请求 ID，失败态创建新 attempt。沿用 `asr/execution_checkpoint.rs` 对源摘要、时长、音轨、模型及运行时、参数、块边界和内容摘要的核对。若宿主侧修复在同一冻结运行时上通过，续跑现场任务应复用前三块和 PCM，从第 4 块补齐，并核对已提交块摘要与修改时间。若证实需要变更 sidecar 代码并发布新运行时，先在固定 2.0.3 的隔离环境确认 T09a 收益，再按冻结绑定要求走新任务重新识别，保留旧任务和检查点供复查。未验证新旧运行时的输出语义等价前，沿用现有隔离规则。需要更新 launcher 时通过比格熊 `scripts/refresh-offline-launcher.py` 生成版本化资源，复用身份与摘要一致的模型资源。
+
+**验收。** 扩展现有 sidecar 生命周期测试和 Rust 定向检查，验证可辨认文本缺时间戳后类型完整、worker 按合同重新准备、拆小成功可恢复、耗尽拆分预算后能定位、取消时无残留执行。若调整 Qwen3 输出分类，再扩展 `runtimes/asr/qwen3-asr/tests/test_engine.py`。真实用 Qwen3-ASR 跑故障附近短段，再用原 **1:18:55** 素材走桌面连接、续跑、取回保存及 SRT 导出。抽听开头、中段、末尾、失败块及长配乐前后。样本须覆盖数分钟和十几分钟配乐无对白、配乐下轻声对白、可辨认唱词、整段无词。空块推进已处理时长，长空档两端的字幕以源时间为准，后段时间不会前移。整段无词时，Any2Text 校对页显示「未检测到对白或歌词」，可保存空结果和完整源时长。核对 `workspace.rs` 的空文稿保存、`export.rs` 的空范围反馈及有词片段导出。SRT 保留时间空档且可读回，整剧回执覆盖完整时长。核对暂停/重启后已登记的有词块和无词块都能复用。记录冷启动、重载次数、识别耗时、峰值内存/显存及临时盘。用同机短样本确定 Qwen3-ASR 验收预算，沿用 §6 的测量口径。
+
+### 8.4 顺序、交付和回退
+
+1. 优先做 T09a 和故障区间复验。短段结果决定 T09b 是否需要改 Qwen3 适配层及发布运行时。再走 T09c 的整剧和任务恢复。T07 和 T08 可独立实施，三项汇合后做联合桌面验收。
+2. T07 与 T08 的界面改动验收后回写 [UI 规范](../design/20261112-UI-any2text.md) 和对应原型预览。T09 回写本节实际运行日志、原任务复用证据与整剧产物。当前状态为只读取证，短段复跑、整剧复跑、构建和联合安装均待执行。
+3. T07 需更新 Any2Text；T08 跟随和 T09 宿主错误恢复需更新比格熊，主题手动切换与任务提示同时更新 Any2Text。若 T09b 涉及运行时，再按验证结果更新对应 launcher。先在隔离工作区验证两端程序，使用正式联合包时另验实际安装后的运行版本和路径。
+4. 两端改动分批验收和回退。导入与皮肤变更沿用现有项目和服务合同；皮肤扩展可独立撤回。转写修复先用隔离副本验证，失败保留原素材、任务行和检查点；撤回程序或运行时按其既有版本和绑定规则处理。完成以三条用户路径实测为准，当前实施状态为待审阅。
+
+### 8.5 实施与验收记录
+
+2026-11-13，已按用户要求实施 T07～T09。两仓开工前 `git fetch origin main` 并核对本地和远程均为 `0/0`。在原工作区定点修改，隔离运行目录、Bridge 端口和库副本用于验收。用户任务所在的原始库和检查点保留现场。
+
+- T07 的客户端生产构建及定向 Rust 测试通过。实际 Windows WebView 走拖入事件入口，用 94,710,398 字节的原始 MP3 向隔离 Bridge 测试替身完成 Rust 流式传输和项目登记，并记录「正在导入」先出现。另用 156,149,223 字节双音轨 MP4 验证重复拖入只提交一次、磁盘不足提示、失败后没有半成品项目，以及重试后显示两条音轨。两项均使用真实客户端与协议替身。
+- T08 的五套外观通过比格熊源变量一致性检查。实际 Windows WebView 与协议替身验证五套背景取色、跟随切换、离线恢复、旧 Bridge 缺主题接口的兼容。隔离实机双 EXE 也通过宿主 IPC 发布五个主题、客户端跟随，以及普通传输层关闭时的连接。联合安装目录有 Any2Text 时，宿主可独立挂载其认证接口，普通 Bridge 总开关继续控制是否监听。
+- 顶部 Windows 系统标题栏替换为 32px 的自绘标题栏。实际安装后的 Windows 窗口验证原系统栏已隐藏，五套皮肤下标题栏与侧栏取色相同，并验证了最小化、最大化、还原、双击最大化和关闭。
+- T09 确认原第 4 块模型输出「啊。」且唯一对齐单元宽度为零。Qwen3-ASR 2.0.4 对已见的无有效对齐短声和纯标点输出做窄分类，仍保留有效对齐的短声、词和唱词。引擎测试 5 项、共享 sidecar 测试 24 项通过。新 launcher 通过归档及三件复用资源逐项 SHA-256 核验。
+- 用实际 Qwen3 权重、对齐器和 2.0.4 适配层扫描原剧全部 163 块。原失败块输出零字幕，整剧记录 41 个空子段、127 个有词子段和 5 个拆分父块。仍有 **00:18:03.483–00:18:10.983** 一个子段无法对齐，程序会把源区间标为待核对，允许取回其余字幕，并在任务队列、字幕校对和导出继续显示。这个产出属于引擎层，不等同于桌面续跑或整剧 SRT 的集成验收。
+- 比格熊工作树在两轮构建中遇到并行的局域网同步改动导致的未定义符号。Windows 联合验证包采用主线加本批相关文件的隔离构建。并行改动入库后，比格熊当前主线 `cargo check --features dev-side-by-side` 通过。验证包隔离安装退出码为 0，两个落盘程序的 SHA-256 与构建产物相符，原数据目录指针核对一致。安装版实测通过服务连接、五套皮肤同步以及 156 MB 双音轨视频和 94.7 MB 原剧导入。该包为本机未签名验收构建。
+- 隔离环境通过实际离线安装接受并激活了含本次 Qwen 引擎修复的 2.0.4 launcher，模型注册因调试构建的多 GB 校验耗时超过验收脚本等待上限，实测转写改用比格熊模型设置 IPC 将已校验的主模型和对齐器绑定至 2.0.4。随后另按最新比格熊源码生成同版本待发布 launcher，同步共享字幕边界校验，通过归档成员摘要和 wire contract 校验。原剧实测使用先接受的 2.0.4 构建。
+- 2.0.4 更新会改变运行时冻结身份。旧 2.0.3 任务继续原绑定才可复用旧块；升级后若任务提示识别配置更新，可打开同一素材开始新转写。新任务的时间核对提示会随任务保存并显示于队列、校对和导出。
+- 原剧的安装版任务提交后处理 163 块、累计 4,735,095 ms，客户端取回并保存、导出 127 条 SRT。读回验证所有字幕的编号、源时间顺序、时长边界和待核对区间留白，最长字幕空档 141.173 秒。第一次运行时测试宿主在另一个验收安装操作期间退出，重启后同一任务复用 82 块，逐项比对摘要和修改时间相同。旧 2.0.3 任务的三个检查点也通过相同核对。原剧字幕未做逐句人工回听。
+- 最终联合验证包使用正式构包的按可执行文件完整路径等待逻辑。隔离安装后，从 Any2Text 直接启动同目录比格熊，并通过默认传输关闭配置下的身份认证和连接检查。关闭 Any2Text 后比格熊继续运行。该验证包与离线模型资源分别交付，空白机器还需要比格熊管理的 FFmpeg、Python 和语音识别模型资源，正式签名发布未执行。
+
+### 8.6 正式联合离线安装与固定入口
+
+2026-11-13，用户要求正式签名、固定 EXE 文件名与位置，并在干净环境验证安装完成后能直接转写。沿用比格熊正式安装目录和升级保留逻辑，启动入口固定为同目录的 `bgxiong-any2text.exe` 和 `bgxiong-ai-story.exe`。复用正式更新签名和离线安装事务，安装程序从同目录的已签名资源清单核验 FFmpeg、Python、Qwen3-ASR launcher、wheelhouse、主权重和对齐器，再自动安装到正常数据目录。Windows 安装与语音运行资源作为同一份交付，统一从安装器启动。验收依次核对构建、签名、空目录自动安装及模型注册、两端连接、导入和 SRT 导出。
+
+用户追加多选导入。文件选择器和拖放复用串行批量导入，每个文件独立校验与登记。界面先显示导入状态，随后显示当前文件、已处理数量及文件阶段进度。单文件错误保留在素材区，其余文件继续。新版打包客户端在 Windows WebView 与协议替身的混合成功/失败回归中通过，三个输入中两个成功，失败文件可见，进度结束后按钮恢复。点击「选择音视频」时捕获到原生调用的多选参数，替换对话框返回值为两条音频路径后，两条均走真实 Rust 导入，且第一条导入调用前已显示进度。原生弹窗的点选操作仍待验证。
+
+联合验证包使用比格熊更新密钥签名。安装器和资源清单分别通过正式更新公钥验签，ZIP64 中 14 个条目通过完整读取及 CRC 检查。验证包以当前用户模式在资源机的空数据目录中安装成功，回执为 0，六项离线资源全部完成，无需手动注册模型。原比格熊数据目录指针未变。验证机同时运行已有比格熊实例，新构建的宿主命中单实例规则后退出。转写环节使用先前的隔离宿主连接此次安装的数据目录，未修改模型绑定。两个转写任务完成并保存，含对白样本导出一条 SRT，另一份结果为空且界面显示未检测到对白或歌词。整机空白 Windows 及每机安装模式仍待验收。
+
+正式发布的画布、IPC 快照和主程序测试门禁仍有失败。当前构包机未配置可用的 Windows 代码签名证书，验证包的 Authenticode 状态为 `NotSigned`。正式联合构包脚本已支持用指定证书及时间戳签名，随后生成比格熊更新签名和离线 ZIP64。
+
+### 8.7 继续完成交付（2026-11-13）
+
+用户要求把剩余任务持续完成，并明确取消购买或申请 Windows 代码签名证书。本批不再以 Authenticode 作为完成前置，不生成自签证书、不修改系统信任；继续保留既有比格熊更新签名和资源 SHA256 校验。验收结果须准确注明 Windows 发布者证书未配置。
+
+续做：归类并修复上一轮发行失败；将验证进程 TEMP/TMP 放入空间充足的工作盘（C 盘不足造成大量数据库/FFmpeg 样本失败）；核实独立 Qwen 资源更新任务；补原生多选及空环境实际安装转写；最后固定交付入口并回写真实运行证据。依主仓 AGENTS.md 的发行失败并行修复要求，画布/脚本检查与架构边界分别由子任务处理，主任务负责测试归因、整合及安装验收。只修本批必要问题，保留其他任务正在修改的文件和有效门禁，不抬高质量基线。
+
+按用户 2026-11-13 最新明确要求，本批联合包保持现有 perMachine 安装与正常 UAC 管理员授权，保留目录选择，不固定 C 盘；升级沿用用户所选目录，两款 EXE 均保持固定小写名称。撤销此前 currentUser 方案。测试安装使用 /D 指定非系统盘隔离目录，前后备份核对本包自己的机器级注册项，不能将环境变量隔离等同于注册表隔离。资源机为 Windows 10 家庭版，没有 Windows Sandbox；验证准确标为本机空数据/空用户缓存/隔离环境，不宣称空白 Windows 虚拟机。
+
+原生多选验证已通过：`artifacts/music-fix/picker-native-check-v4/results.json` 记录真实 Windows 对话框一次返回两份文件、真实 Rust 导入两份及首次导入调用前已显示 loading。测试替身只替代 Bridge 服务，不替代文件选择器或导入 IPC。
+
+
+### 8.8 管理员安装与主程序外挂入口（2026-11-13 追加）
+
+用户明确要求保留发行版管理员授权及可选安装目录，覆盖此前 currentUser 决定；不固定 C 盘。取消 Windows 证书采购不影响 UAC，二者分别处理。
+
+主程序左侧导航“设置”组下方增加同级“外挂”按钮，直接调用零路径参数的 `launch_any2text`，仅启动主程序 EXE 同目录的 `bgxiong-any2text.exe`。目录由用户安装时选择，应用不搜索开发目录或临时版本；缺失或不可启动时明确提示。客户端单实例处理重复启动，恢复并聚焦原窗口。UI 不切换当前工作页，不增加说明小字。
+
+本轮按钮的双击防重、失败反馈与恢复状态测试 2/2 通过，主程序 UI 构建与中英词条一致性检查通过。最终客户端真实 EXE 单实例测试通过：第二次进程退出 0，原窗口恢复并成为前台，仅保留一个主窗口；原生窗口标题、页面标题、自定义标题栏和侧栏品牌均为“比格熊-any2text”（artifacts/music-fix/client-single-instance-live-v5-naming/results.json）。固定客户端 SHA256 为 8303104f7a679247605377c59ff6cc009243572dedac17f7f34ee06b4cd8329f。两树 IPC/authz 校验通过；主程序按钮与管理员联合安装的最终产物联验继续执行，不能以 UI 测试替代安装验收。
+
+管理员安装器通过正常 RunAsUser 启动资源配置进程时，显式传递已选择的数据目录，不能依赖跨权限环境变量继承；保护用户原数据指针与机器级安装登记。最终验收仍须使用同一安装 EXE、空应用数据、隔离缓存与净化 PATH，记录安装路径和模型实际路径。
+
+### 8.9 最终发行检查跟踪（2026-11-13 17:08）
+
+发行使用独立工作树 `L:/00Dev/bgxiong-ai-story-any2text-release`，批次基线为 `f247f4c5db130f2bd3ed0cb5c6c1de470fe839ed`，包含本批已审阅的未提交修改。冻结清单 `temp/release-prep/frozen-source-final-v2.json` 记录 25,857 个输入，SHA256 为 `9f5c48c0f9d1f4a6a5abffdc7dcec382f614bc946e9a6e1d6c528f215fd4b0f4`。主仓随后产生的新提交不混入正在运行的批次，不能称为包含之后所有主仓变更。
+
+旧一轮完整主程序测试为 10,420 通过、12 失败、124 忽略；失败归因于测试环境缺少实际 Skill worker、FFmpeg 路径和本地代理排除配置。补齐后 11 项直接定向复验通过，剩余 RC56 聚合验收交由最终整轮覆盖。该轮二进制早于最终“外挂”入口和安装引导修改，不能冒充最终源码的全量测试结果。
+
+发行 v5 使用最终客户端摘要及既有签名资源清单；25 项发布输入检查已通过，SDK 准备及资源同步完成，正在完整 preflight。前两次重试因 GitHub TLS 中断；另已修复 SDK 准备脚本在冻结批次内错误尝试合并宿主的问题，仍保留真实远程核对、SDK 同步及输入摘要验证。构建、最终安装和真实入口验收尚未完成，证据分别写入 `artifacts/music-fix/frozen-full-release-v5.log` 与后续独立验收目录。
+
+最终安装验收脚本只通过产品实际按钮完成导入、提交、取回及导出，使用真实 Windows 多选和保存对话框；检查安装后的宿主与客户端摘要，以及托管 Python/模型路径。额外“外挂”检查真实点击主程序侧栏，核对已有客户端被复用并聚焦。若空应用环境的登录门控或调试附着条件不满足，单独记为 `NOT_RUN`，不将其他验收成功推导为该入口已实测。
+
+18:05 更新：v5 的最终源码主程序全量测试通过，**10,438 passed / 0 failed / 124 ignored**，耗时 1,247.72 秒；新增外挂平台测试及 RC56 的 654 个独立测试世界全部通过。证据为冻结树 `logs/architecture-cargo-11d728f9c9254a77a844f469672f3101.log`，共享库测试随后也通过。完整 preflight 仍在收齐，已确认的两个失败门禁为 quality-ratchet 的局部代码规范问题，以及 request-completion 文档原始 CRLF 字节在冻结副本变成 LF 后的摘要漂移；对应修复已定位，尚未改动运行中的冻结输入。该结果仍不等于安装包已产出或装后转写已验收。
+
+20:27 更新。v5 最终收齐四个失败门禁，归因于新增代码警告、文档换行字节差异和 MCP 验收目录漏同步。修复了受影响的前后端源码及两项验收输入，定向复验通过。质量计数使用实际 Clippy 输出复核，九处改动文件均满足原基线。已审阅的 Comfy 责任文件摘要随源码更新，原有延后验证的三个符号仍沿用既定范围。主仓后续并行新增工具超出本批，MCP 验收目录仅在冻结树更新。
+
+下一轮使用 `frozen-source-final-v3.json`，摘要为 `988e6826564da8a2e5938c27edec6f5989061a07e4ffaa3791d3c34c1bbc53ee`。调试和发行均使用 SDK `48a93b7df975a6bee753cfc095a26e22a3289c27`，按源码锁选择对应的已验证产物。v6 的单个技能包下载因 TLS 中断，v7 重试后输入检查 25 项全部通过，现执行完整发行检查。主程序安装、离线转写和实际按钮启动验收待最终产物。
+
+2026-11-14 00:02，v8 完整构建退出 0。最终源码清单 `frozen-source-final-v4.json` 的摘要为 `bb198881a13f45bf006234541fc0daafd8f37540a71dcea2b2835cab81332834`。相对 v3 只把 `subtitle_timeline_worker.rs` 已消除的 Clippy 警告基线从 1 调整为 0。25 项输入检查及完整 preflight 通过，主程序测试 10,436 通过、0 失败、124 忽略，共享库和工作区通过。安装器为 `artifacts/official-joint/bgxiong-ai-story-any2text_0.6.1113_x64-setup.exe`，摘要为 `70bd4338b8e884a14132a011cb3c92b61ea21c8e151f5aa21c290befd9d8da28`。同目录生成联合 ZIP 及比格熊更新签名。按用户决定取消 Windows 发布者证书，安装器 Authenticode 检查结果为 `NotSigned`。
+
+冻结主程序 EXE 摘要为 `fda1e88fb6dcfc546ab2a475d18d6a474e241551c65140967d7e0d3263d7f653`，已复制到客户端固定目录并复核字节。联合包压缩内容验签和安装器真实验收分别记账。运行环境仍有用户或其他会话打开的比格熊实例，需保存并退出后再测同一份安装器的启动和转写。
+
+### 8.10 冷启动离线配置复验（2026-11-14）
+
+最终宿主在 K 盘首次空目录配置时，依赖安装成功，随后的实际导入检查达到原 120 秒限制。L 盘第二个空目录用原资源完成配置，耗时 780.27 秒。分段计时中 PyTorch、jsonschema、Qwen 和依赖一致性检查累计约 102 秒，原限制对磁盘或缓存较慢的首次运行余量不足。将 Python 环境探测上限调整为 600 秒，保留实际导入、锁定版本、pip 依赖和 GPU 能力检查。超时返回未就绪并留下具体错误。宿主的模型准备期限由既有合同管理。
+
+`frozen-source-final-v5.json` 摘要 `0b19a20188e34a3988be9affc69d457acadd8a2d7cb84a4e5682f492374da3c7`，相对 v4 只修改 `_shared/bootstrap.py`。沿用已通过完整检查的两款 EXE，重新生成本地联合包的 Qwen3-ASR 2.0.4 启动器与签名资源清单。已有权重、对齐器、依赖、Python、FFmpeg 逐项摘要一致。新的 NSIS 生成脚本相对 v8 仅变更输出路径和内嵌资源清单，4,797 个文件、20 个映射再次通过核验。Python 定向单测与 ASR 引擎边界检查通过。
+
+更新后的联合 ZIP 位于 `artifacts/official-joint-2.0.4/bgxiong-ai-story-any2text_0.6.1113_x64-setup.zip`，SHA256 为 `c476b406263054fb3ecf990b330e06840928fb4234faa33e3819406275f0f6cc`。14 个成员读回、CRC、SHA256、安装器更新签名和资源签名均通过。对应安装器摘要 `f2c5077d0746ae0750c5173d28717434f853d80181fa0696f5b439beee2d6e0b`，管理员安装、目录可选。该包取代 §8.9 的旧候选。
+
+K 盘新空目录使用同一最终宿主、同一新签名资源清单自动配置 6 项资源，耗时 960.91 秒并返回 `ready`。净化 PATH 与空缓存下，使用该目录自动配置的 FFmpeg、Python、Qwen3-ASR 2.0.4 和对齐器实际转写 12 秒样本，生成 1 条 SRT、15 个时间单位。证据为 `artifacts/music-fix/final-probe-bootstrap-result.json` 与 `final-probe-transcription-result.json`。此项覆盖资源配置和真实引擎转写。NSIS 管理员安装和装后桌面按钮链路仍等运行中的比格熊退出后验收。
+
+### 8.11 随比格熊发行，统一资源入口（2026-11-14）
+
+用户确认 Any2Text 作为比格熊内置组件随下次主程序发版，由左侧「外挂」启动。主程序安装器只安装程序组件，沿用管理员授权和可选安装目录。模型、Python 与 FFmpeg 由比格熊联网安装或离线资源导入。客户端只消费比格熊本地服务，缺模型时提示安装并支持刷新能力，导入缺 FFmpeg 时由比格熊返回安装提示。
+
+主程序发行脚本默认构建同级 Any2Text 源码，也接受经过组件摘要和协议校验的预构建产物。安装器资源映射只新增 `bgxiong-any2text.exe`，取消组件单独快捷方式以及安装器引导配置离线资源和联合 ZIP 的流程。旧试验包仅作证据保留。下一次主程序发版统一重建程序和安装器。

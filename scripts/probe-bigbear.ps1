@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $ModelConfigId,
     [string] $Language = 'zh',
     [string] $OutputRoot = (Join-Path $PSScriptRoot '../artifacts/t00'),
+    [string] $RegistryPath = (Join-Path $env:LOCALAPPDATA 'BigBear/local-bridge/registry.json'),
     [ValidateRange(1, 3600)] [int] $TimeoutSeconds = 120
 )
 
@@ -12,7 +13,6 @@ $ErrorActionPreference = 'Stop'
 $media = Get-Item -LiteralPath $MediaPath
 if ($media.PSIsContainer -or $media.Length -eq 0) { throw 'Expected a non-empty media file.' }
 
-$registryPath = Join-Path $env:LOCALAPPDATA 'BigBear/local-bridge/registry.json'
 $registry = Get-Content -Raw -LiteralPath $registryPath | ConvertFrom-Json
 $base = [uri] $registry.baseUrl
 if ($base.Scheme -ne 'http' -or $base.Host -ne '127.0.0.1' -or

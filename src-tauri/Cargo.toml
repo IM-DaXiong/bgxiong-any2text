@@ -1,0 +1,26 @@
+[package]
+name = "bgxiong-any2text"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "=2.5.6"
+
+[dependencies]
+async-trait = "0.1"
+futures-util = { version = "0.3", default-features = false }
+tauri = { version = "=2.10.3", features = ["protocol-asset"] }
+tauri-plugin-dialog = "=2.7.0"
+tauri-plugin-single-instance = "=2.4.2"
+reqwest = { version = "=0.13.2", default-features = false, features = ["json", "stream", "native-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "io-util", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["io"] }
+rusqlite = { version = "=0.32.1", features = ["bundled"] }
+sha2 = "0.10"
+tempfile = "3"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "dark",
+    "label": "深色",
+    "colorScheme": "dark"
+  },
+  {
+    "id": "light",
+    "label": "浅色",
+    "colorScheme": "light"
+  },
+  {
+    "id": "sakura",
+    "label": "樱花粉",
+    "colorScheme": "light"
+  },
+  {
+    "id": "ocean",
+    "label": "海天蓝",
+    "colorScheme": "dark"
+  },
+  {
+    "id": "fresh",
+    "label": "清新绿",
+    "colorScheme": "light"
+  }
+]
