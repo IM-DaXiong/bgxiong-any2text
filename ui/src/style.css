@@ -38,7 +38,6 @@ video { max-height: 136px; background: var(--bg); border-radius: 6px; }
 .window-close::after { transform: rotate(-45deg); }
 .shell { display: grid; grid-template-columns: 152px minmax(0, 1fr); min-height: calc(100vh - 32px); }
 aside { padding: 14px 10px; background: var(--surface2); border-inline-end: 1px solid var(--border); }
-.brand { display: block; margin: 0 8px 14px; font-size: 16px; letter-spacing: .01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 nav { display: grid; gap: 4px; }
 nav button { text-align: start; background: transparent; border-color: transparent; }
 nav button[aria-current], button.selected { background: var(--accent-soft); border-color: var(--accent); }
@@ -84,7 +83,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 480px; overflo
 @media (max-width: 849px) {
   .shell, .columns, .editor { grid-template-columns: minmax(0, 1fr); }
   aside { border-inline-end: 0; border-block-end: 1px solid var(--border); }
-  .brand { margin-bottom: 6px; }
   nav { display: flex; flex-wrap: wrap; }
   .segments { max-height: 260px; }
 }

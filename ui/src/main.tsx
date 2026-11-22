@@ -348,7 +348,7 @@ function App() {
   const canSubmit = serviceMatches && chosen?.installed && !chosen.issues.length && chosen.timings.includes('segmentTimed') && chosen.languages.includes(language);
 
   return <><WindowTitleBar onError={setError} /><div className="shell">
-    <aside><strong className="brand">比格熊-any2text</strong><nav aria-label="工作区导航">
+    <aside><nav aria-label="工作区导航">
       {pages.map((name, index) => <button key={name} aria-current={page === index ? 'page' : undefined} onClick={() => { setPage(index); setError(''); }}>{name}</button>)}
     </nav></aside>
     <div className="main">
