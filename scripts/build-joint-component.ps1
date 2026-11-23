@@ -1,4 +1,4 @@
-param([string] $OutputDirectory = (Join-Path $PSScriptRoot '../artifacts/joint'))
+param([string] $OutputDirectory = 'L:/00Dev/bgxiong-00-release/dev-bgxiong-any2text')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -16,7 +16,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Any2Text dependency installation failed.' }
     & npm.cmd run build
     if ($LASTEXITCODE -ne 0) { throw 'Any2Text frontend build failed.' }
-    $target = Join-Path $output 'cargo-target'
+    # Compiler cache stays internal; never mix it with deliverables.
+    $target = Join-Path $root 'artifacts/joint/cargo-target'
     & cargo build --manifest-path src-tauri/Cargo.toml --target-dir $target --release --locked --features custom-protocol
     if ($LASTEXITCODE -ne 0) { throw 'Any2Text release executable build failed.' }
     if ((& git rev-parse HEAD).Trim() -ne $source) { throw 'The Any2Text source revision changed during the build.' }

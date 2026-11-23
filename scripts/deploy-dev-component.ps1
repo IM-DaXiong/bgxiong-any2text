@@ -1,6 +1,6 @@
 # Deploy an existing packaged companion beside a development host; no build.
 param(
-    [string]$ArtifactDirectory = (Join-Path $PSScriptRoot '../artifacts/joint'),
+    [string]$ArtifactDirectory = 'L:/00Dev/bgxiong-00-release/dev-bgxiong-any2text',
     [string]$HostExecutable = (Join-Path $PSScriptRoot '../../bgxiong-ai-story/src-tauri/target/debug/bgxiong-ai-story-tauri.exe')
 )
 $ErrorActionPreference = 'Stop'
