@@ -3,6 +3,7 @@ mod export;
 mod provider;
 mod providers;
 mod workspace;
+mod subtitle_correction;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -40,6 +41,7 @@ pub fn run() {
             application::disconnect,
             application::provider_health,
             application::provider_appearance,
+            application::provider_shortcut_bindings,
             application::launch_bigbear,
             application::projects,
             application::import_media,
@@ -47,6 +49,7 @@ pub fn run() {
             application::relocate_media,
             application::copy_media,
             application::jobs,
+            application::delete_job,
             application::submit_transcription,
             application::refresh_job,
             application::retry_pending_request,
@@ -56,6 +59,7 @@ pub fn run() {
             application::revisions,
             application::checkout_revision,
             application::save_correction,
+            application::save_subtitle_revision,
             application::preview_export,
             application::export_document,
             application::submit_organize,

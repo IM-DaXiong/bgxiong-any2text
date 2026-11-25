@@ -5,6 +5,13 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, type Candidate, type Capabilities, type Document, type DocumentRevision, type ImportProgress, type LocalJob, type Project } from './api/any2text';
 import { isThemeId, themeIds, themeMeta, useAppearance } from './theme';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Btn, NativeDialog, UiRangeSlider } from './uiChrome';
+import { SubtitleReviewWorkspace } from './subtitles/SubtitleReviewWorkspace';
+import { entryRange, fromDocument } from './subtitles/subtitleDraft';
+import { useSubtitleBindings } from './subtitles/useSubtitleShortcuts';
+import type { Correction, TimeRange } from './api/any2text';
+import '@bgxiong/standalone-chrome/style.css';
 import { WindowTitleBar } from './WindowTitleBar';
 import './bigbear-theme.css';
 import './style.css';
@@ -56,10 +63,12 @@ function App() {
   const [doc, setDoc] = useState<Document>();
   const [rawDoc, setRawDoc] = useState<Document>();
   const [revisions, setRevisions] = useState<DocumentRevision[]>([]);
-  const [changes, setChanges] = useState<Record<string, string>>({});
+  const [edited, setEdited] = useState<Correction>();
+  const [jobToDelete, setJobToDelete] = useState<LocalJob>();
+  const [pendingDeparture, setPendingDeparture] = useState<(savedRevision?: string) => void>();
+  const history = useRef<{ draft: Correction; activeId: string; typing?: string }[]>([]);
   const [activeId, setActiveId] = useState('');
-  const [query, setQuery] = useState('');
-  const [listPage, setListPage] = useState(0);
+  const [revealId, setRevealId] = useState('');
   const [mediaPath, setMediaPath] = useState('');
   const [mediaError, setMediaError] = useState('');
   const [positionMs, setPositionMs] = useState(0);
@@ -88,11 +97,13 @@ function App() {
   );
   const { appearance, setAppearance } = useAppearance(capabilities);
   const serviceMatches = attached && !!project && project.serviceId === capabilities.serviceId && project.providerId === capabilities.providerId;
-  const dirty = Object.keys(changes).length > 0;
+  const draft = useMemo(() => edited ?? (doc ? fromDocument(doc) : undefined), [edited, doc]);
+  const dirty = edited !== undefined;
+  const bindings = useSubtitleBindings(autoConnect, capabilities?.endpointInstance);
   const draftDirty = Object.keys(draftChanges).length > 0;
-  const active = doc?.segments.find(s => s.id === activeId) ?? doc?.segments[0];
-  const original = rawDoc?.segments.find(s => s.id === active?.id);
-  const range = selectionOnly && active ? { startMs: active.startMs, endMs: active.endMs } : null;
+  const active = draft?.entries.find(s => s.id === activeId) ?? draft?.entries[0];
+  const range = selectionOnly && draft ? entryRange(draft, active) ?? null : null;
+  const expectedExport = exportSource === 'original' ? rawDoc?.revision : doc?.revision;
   const candidate = candidates.find(c => c.id === candidateId);
   const currentCandidate = candidate?.draft.sourceRevision === doc?.revision;
 
@@ -113,10 +124,16 @@ function App() {
   };
 
   const selectProject = (id: string) => {
-    if (id === projectId) return;
-    if (dirty || draftDirty) { setError('请先保存当前编辑。'); return; }
+    if (id === projectId || runningAction.current) return;
+    if (dirty || draftDirty) { guardDeparture(() => switchProject(id)); return; }
+    switchProject(id);
+  };
+
+  const switchProject = (id: string) => {
+    stopReviewPlayback(); nextSeek.current = undefined;
+    setEdited(undefined); history.current = [];
     setProjectId(id); setError(''); setDoc(undefined); setRawDoc(undefined); setCandidateId('');
-    setCandidates([]); setRevisions([]); setActiveId(''); setQuery(''); setListPage(0);
+    setCandidates([]); setRevisions([]); setActiveId('');
   };
 
   const connectService = useCallback(async () => {
@@ -223,7 +240,7 @@ function App() {
       }
       if (imported.length) {
         await loadProjects();
-        selectProject(imported[0].id);
+        switchProject(imported[0].id);
         setPage(0);
         if (total > 1) setNotice(`已导入 ${imported.length} 个素材。`);
       }
@@ -266,6 +283,7 @@ function App() {
     if (!project) return;
     setTrack(project.input.audioTracks[0]?.index ?? 0);
     setMediaPath(''); setMediaError('');
+    if (!project.original) { setDoc(undefined); setRawDoc(undefined); setRevisions([]); setCandidates([]); setCandidateId(''); }
     if (project.original) {
       void Promise.all([api.document(project.id), api.document(project.id, true), api.revisions(project.id)]).then(([current, raw, history]) => {
         if (disposed) return;
@@ -312,14 +330,17 @@ function App() {
     if (page !== 4 || !project?.original) return;
     const request = exportSource === 'candidate' && candidate && candidate.accepted && currentCandidate && !draftDirty && !dirty
       ? api.previewCandidate(candidate.id, format)
-      : exportSource !== 'candidate' && (exportSource === 'original' || !dirty)
-        ? api.preview(project.id, exportSource === 'original', format, range) : undefined;
+      : exportSource !== 'candidate' && (exportSource === 'original' || !dirty) && (!selectionOnly || range)
+        ? api.preview(project.id, exportSource === 'original', format, range, expectedExport) : undefined;
     void request?.then(text => { if (!disposed) setPreview(text); }).catch(e => { if (!disposed) setError(String(e)); });
     return () => { disposed = true; };
-  }, [page, project?.id, project?.original, doc?.revision, exportSource, format, candidate?.revision, candidate?.accepted, currentCandidate, dirty, draftDirty, range?.startMs, range?.endMs]);
+  }, [page, project?.id, project?.original, doc?.revision, exportSource, format, candidate?.revision, candidate?.accepted, currentCandidate, dirty, draftDirty, expectedExport, selectionOnly, range?.startMs, range?.endMs]);
 
-  const seek = (id: string, ms: number) => {
+  const seek = (id: string, ms?: number) => {
+    stopReviewPlayback();
+    nextSeek.current = undefined;
     setActiveId(id);
+    if (ms === undefined) return;
     setPositionMs(ms);
     if (player.current) player.current.currentTime = ms / 1000;
     else nextSeek.current = ms;
@@ -332,22 +353,122 @@ function App() {
   };
   const mediaRef = (element: HTMLMediaElement | null) => { player.current = element; };
   const mediaSource = mediaPath ? convertFileSrc(mediaPath) : '';
-  const searchable = useMemo(() => doc?.segments.map(segment => ({
-    segment,
-    text: (changes[segment.id] ?? segment.text).toLocaleLowerCase(),
-  })) ?? [], [doc, changes]);
-  const filtered = useMemo(() => {
-    const term = query.toLocaleLowerCase();
-    return searchable.filter(entry => entry.text.includes(term)).map(entry => entry.segment);
-  }, [searchable, query]);
+  const reviewCleanup = useRef<() => void>(() => {});
+  const stopReviewPlayback = useCallback(() => {
+    reviewCleanup.current();
+    reviewCleanup.current = () => {};
+  }, []);
+  useEffect(() => () => { stopReviewPlayback(); nextSeek.current = undefined; }, [projectId, mediaPath, page, doc?.revision, stopReviewPlayback]);
+  const playReview = (range: TimeRange, loop: boolean, failed: (error: string) => void) => {
+    stopReviewPlayback();
+    const audio = player.current;
+    if (!audio || audio.readyState < 1) { failed('素材当前无法试听。'); return; }
+    audio.pause();
+    let live = true;
+    let timer = 0;
+    const clearTimer = () => window.clearTimeout(timer);
+    const start = () => {
+      if (!live) return;
+      if (Math.abs(audio.currentTime * 1000 - range.startMs) > 30) {
+        audio.currentTime = range.startMs / 1000;
+        return;
+      }
+      void audio.play().catch(reason => { if (live) failed(String(reason)); });
+    };
+    const seekStart = () => {
+      if (Math.abs(audio.currentTime - range.startMs / 1000) < .001) start();
+      else audio.currentTime = range.startMs / 1000;
+    };
+    const boundary = () => {
+      clearTimer();
+      if (!live || audio.paused) return;
+      const left = range.endMs - audio.currentTime * 1000;
+      if (left <= 0) {
+        audio.pause();
+        if (loop) seekStart();
+        else stopReviewPlayback();
+      } else timer = window.setTimeout(boundary, Math.max(1, left / audio.playbackRate));
+    };
+    audio.addEventListener('seeked', start);
+    audio.addEventListener('playing', boundary);
+    audio.addEventListener('timeupdate', boundary);
+    const ended = () => { if (live && loop) seekStart(); else stopReviewPlayback(); };
+    audio.addEventListener('ended', ended);
+    reviewCleanup.current = () => {
+      live = false; clearTimer(); audio.pause();
+      audio.removeEventListener('seeked', start);
+      audio.removeEventListener('playing', boundary);
+      audio.removeEventListener('timeupdate', boundary);
+      audio.removeEventListener('ended', ended);
+    };
+    seekStart();
+  };
+  const seekWithinReview = (ms: number) => {
+    stopReviewPlayback();
+    if (player.current && player.current.readyState > 0) {
+      player.current.currentTime = ms / 1000;
+      setPositionMs(ms);
+    }
+  };
+  const changeDraft = (next: Correction, id = activeId, coalesce = false) => {
+    if (!draft || next === draft) return;
+    if (!coalesce || history.current.at(-1)?.typing !== id) {
+      history.current.push({ draft, activeId, typing: coalesce ? id : undefined });
+    }
+    setEdited(next);
+    setActiveId(id);
+  };
+  const undoDraft = () => {
+    const previous = history.current.pop();
+    if (!previous || !doc) return;
+    setEdited(previous.draft.entries === doc.entries && previous.draft.reviewGroups === doc.reviewGroups ? undefined : previous.draft);
+    setActiveId(previous.activeId);
+  };
+  const persistSubtitle = async () => {
+    if (!dirty || !doc || !draft) return;
+    const saved = await api.saveSubtitleRevision(projectId, doc.revision, draft);
+    setDoc(saved);
+    setEdited(current => current === draft ? undefined : current);
+    for (const snapshot of history.current) snapshot.typing = undefined;
+    setRevisions(await api.revisions(projectId)); await loadProjects();
+    setNotice('校订已保存');
+    return saved.revision;
+  };
+  const guardDeparture = (proceed: (savedRevision?: string) => void) => {
+    if (dirty || draftDirty) setPendingDeparture(() => proceed);
+    else proceed();
+  };
+  const checkoutSubtitle = (revision: string) => guardDeparture(savedRevision => void action(async () => {
+    if (!doc) return;
+    await api.checkout(projectId, revision, savedRevision ?? doc.revision);
+    const [updated, raw] = await Promise.all([api.document(projectId), api.document(projectId, true)]);
+    setDoc(updated); setRawDoc(raw); setActiveId(''); setEdited(undefined);
+    history.current = [];
+    await loadProjects();
+  }));
+  const requestWindowClose = useCallback(() => {
+    if (runningAction.current) {
+      setError('请等当前操作完成后再关闭。');
+      return;
+    }
+    const close = () => { void getCurrentWindow().destroy().catch(reason => setError(String(reason))); };
+    if (dirty || draftDirty) setPendingDeparture(() => close);
+    else close();
+  }, [dirty, draftDirty]);
+  useEffect(() => {
+    const listener = getCurrentWindow().onCloseRequested(event => {
+      event.preventDefault();
+      requestWindowClose();
+    });
+    return () => { void listener.then(unlisten => unlisten()).catch(() => {}); };
+  }, [requestWindowClose]);
   const peaks = doc?.waveformPeaks ?? [];
   const peakBars = waveformDetail ? peaks : peaks.filter((_, index) => index % 4 === 0)
     .map((_, index) => Math.max(...peaks.slice(index * 4, index * 4 + 4)));
   const trackPosition = () => setPositionMs(Math.round((player.current?.currentTime ?? 0) * 1000));
-  const pageSize = 80;
   const canSubmit = serviceMatches && chosen?.installed && !chosen.issues.length && chosen.timings.includes('segmentTimed') && chosen.languages.includes(language);
 
-  return <><WindowTitleBar onError={setError} /><div className="shell">
+  return <><WindowTitleBar onError={setError} onClose={requestWindowClose} /><div className={page === 2 ? 'shell subtitle-shell' : 'shell'}>
     <aside><nav aria-label="工作区导航">
       {pages.map((name, index) => <button key={name} aria-current={page === index ? 'page' : undefined} onClick={() => { setPage(index); setError(''); }}>{name}</button>)}
     </nav></aside>
@@ -374,7 +495,6 @@ function App() {
       </section>}
       </div></div></header>
       <main>
-        <h1>{pages[page]}</h1>
         {error && <p className="alert" role="alert">{error}</p>}
         {notice && <p className="notice" role="status">{notice}</p>}
         {page === 0 && <div className="columns">
@@ -436,70 +556,56 @@ function App() {
                 {['queued', 'running', 'paused', 'pausing'].includes(status) && <button disabled={busy || !online} onClick={() => void update('cancel')}>取消</button>}
                 {['paused', 'cancelled', 'failed'].includes(status) && job.remote?.error?.code !== 'modelChanged' && <button disabled={busy || !online || !capabilities?.resume} onClick={() => void update('resume')}>继续未完成部分</button>}
                 {job.remote?.error?.code === 'modelChanged' && <button disabled={busy || dirty || draftDirty} onClick={() => {
-                  selectProject(job.projectId); setPage(0);
+                  switchProject(job.projectId); setPage(0);
                 }}>打开素材重新转写</button>}
                 {status === 'resultReady' && !job.document && <button className="primary" disabled={busy || !online || dirty || draftDirty} onClick={() => void action(async () => {
                   const updated = await api.retrieve(id); await loadProjects(); await loadJobs(); selectProject(updated.id);
                   if (job.request.operation.kind === 'organize') { await reloadCandidates(updated.id); setPage(3); }
                   else setPage(2);
                 })}>取回并保存</button>}
+                {terminal.has(status) && <Btn variant="danger" size="compact" disabled={busy || dirty || draftDirty}
+                  onClick={() => setJobToDelete(job)}>清理任务</Btn>}
                 {job.document && <button disabled={busy || dirty || draftDirty} onClick={() => void action(async () => {
                   const owner = projects.find(item => item.id === job.projectId);
                   if (job.request.operation.kind === 'transcribe' && job.document && owner?.original && owner.original !== job.document) {
                     await api.checkout(owner.id, job.document, owner.correction ?? owner.original); await loadProjects();
                   }
-                  selectProject(job.projectId); setPage(job.request.operation.kind === 'organize' ? 3 : 2);
+                  switchProject(job.projectId); setPage(job.request.operation.kind === 'organize' ? 3 : 2);
                 })}>打开本地成果</button>}
               </div></article>;
           })}
         </section>}
         {(page === 2 || page === 4) && timingReview && <p className="notice" role="status">{timingReview.message}</p>}
-        {page === 2 && (!doc ? <p className="muted">请打开已取回原文的项目。</p> : <div className="columns editor">
-          <section className="panel stack"><div className="row spread"><h2>定位与字幕</h2><button disabled={busy} onClick={() => void action(async () => {
-            const path = await open({ multiple: false, filters: mediaFilters });
-            if (typeof path === 'string') { await api.relocate(projectId, path); await loadProjects(); setMediaPath(await api.playback(projectId)); setMediaError(''); }
-          })}>重新定位素材</button></div>
+        {page === 2 && (!doc || !draft ? <p className="muted">请打开已取回原文的项目。</p> :
+          <SubtitleReviewWorkspace key={projectId + ':' + doc.original} draft={draft} doc={doc} rawDoc={rawDoc}
+            activeId={activeId} revealId={revealId} select={seek} change={changeDraft} undo={undoDraft} canUndo={history.current.length > 0}
+            dirty={dirty} busy={busy} revisions={revisions} checkout={checkoutSubtitle} save={() => void action(async () => { await persistSubtitle(); })}
+            organize={() => setPage(3)} exportPage={() => setPage(4)} play={playReview} stop={stopReviewPlayback} seekPlayback={seekWithinReview} positionMs={positionMs}
+            bindings={bindings} reportError={reason => setError(String(reason))} media={<>
+              <div className="row"><Btn variant="ghost" disabled={busy} onClick={() => void action(async () => {
+                const path = await open({ multiple: false, filters: mediaFilters });
+                if (typeof path === 'string') {
+                  stopReviewPlayback(); nextSeek.current = undefined;
+                  await api.relocate(projectId, path); await loadProjects();
+                  setMediaPath(await api.playback(projectId)); setMediaError('');
+                }
+              })}>重新定位素材</Btn></div>
             {mediaSource && (/\.(wav|mp3|m4a|aac|flac|ogg)$/i.test(mediaPath)
               ? <audio ref={mediaRef} controls src={mediaSource} onLoadedMetadata={mediaReady} onTimeUpdate={trackPosition} onError={() => setMediaError('当前编码无法直接播放')} />
               : <video ref={mediaRef} controls src={mediaSource} onLoadedMetadata={mediaReady} onTimeUpdate={trackPosition} onError={() => setMediaError('当前编码无法直接播放')} />)}
             {!!peakBars.length && project && <div className="row wave-row">
               <div className="waveform">
                 <div className="wave-bars" aria-hidden="true">{peakBars.map((value,index) => <i key={index} style={{ height:`${Math.max(3, value * 100)}%` }} />)}</div>
-                <input aria-label="波形定位" type="range" min={0} max={project.input.durationMs} step={100} value={positionMs} onChange={e => {
-                  const ms = Number(e.target.value);
-                  const segment = doc.segments.findLast(s => s.startMs <= ms) ?? doc.segments[0];
-                  if (segment) seek(segment.id, ms);
-                }} />
+                <UiRangeSlider aria-label="波形定位" min={0} max={project.input.durationMs} step={10}
+                  value={positionMs} onChange={ms => {
+                    const segment = draft.entries.findLast(item => (entryRange(draft, item)?.startMs ?? Infinity) <= ms);
+                    if (segment) seek(segment.id, ms);
+                  }} />
               </div>
-              <button aria-pressed={waveformDetail} onClick={() => setWaveformDetail(!waveformDetail)}>波形细节</button>
+              <Btn variant="ghost" aria-pressed={waveformDetail} onClick={() => setWaveformDetail(!waveformDetail)}>波形细节</Btn>
             </div>}
             {mediaError && <p className="muted">{mediaError}</p>}
-            <input type="search" aria-label="搜索字幕" placeholder="搜索字幕" value={query} onChange={e => { setQuery(e.target.value); setListPage(0); }} />
-            {doc.segments.length === 0 && <p className="muted">{timingReview ? '当前没有可显示的字幕。' : '未检测到对白或歌词。'}</p>}
-            {doc.segments.length > 0 && filtered.length === 0 && <p className="muted">没有匹配的字幕。</p>}
-            <div className="segments">{filtered.slice(listPage * pageSize, (listPage + 1) * pageSize).map(s =>
-              <button key={s.id} className={s.id === active?.id ? 'selected' : ''} onClick={() => seek(s.id, s.startMs)}><time>{duration(s.startMs)}</time><span>{changes[s.id] ?? s.text}</span></button>)}</div>
-            {filtered.length > pageSize && <div className="row"><button disabled={!listPage} onClick={() => setListPage(listPage - 1)}>上一页</button><span>{listPage + 1} / {Math.ceil(filtered.length / pageSize)}</span><button disabled={(listPage + 1) * pageSize >= filtered.length} onClick={() => setListPage(listPage + 1)}>下一页</button></div>}
-          </section>
-          <section className="panel stack"><div className="row spread"><h2>校订</h2><span>{dirty ? '未保存' : '已保存'}</span></div>
-            {revisions.length > 1 && <label>文稿版本<select value={doc.revision} disabled={busy || dirty || draftDirty} onChange={e => {
-              const revision = e.target.value;
-              void action(async () => {
-                await api.checkout(projectId, revision, doc.revision);
-                const [current, raw] = await Promise.all([api.document(projectId), api.document(projectId, true)]);
-                setDoc(current); setRawDoc(raw); setActiveId(''); await loadProjects();
-              });
-            }}>{revisions.map((row, index) => <option value={row.id} key={row.id}>{row.kind === 'original' ? '识别原文' : '校订'} · 版本 {revisions.length - index}</option>)}</select></label>}
-            {active && <><label>当前字幕<textarea rows={6} value={changes[active.id] ?? active.text} onChange={e => {
-              const value = e.target.value;
-              setChanges(before => { const next = { ...before }; if (value === active.text) delete next[active.id]; else next[active.id] = value; return next; });
-            }} /></label>
-              <details><summary>识别原文</summary><p>{original?.text}</p></details></>}
-            <div className="row"><button className="primary" disabled={busy || !dirty} onClick={() => void action(async () => {
-              const saved = await api.saveCorrection(projectId, doc.revision, changes); setDoc(saved); setChanges({}); setRevisions(await api.revisions(projectId)); await loadProjects(); setNotice('校订已保存');
-            })}>保存校订</button><button disabled={dirty} onClick={() => setPage(3)}>整理成稿</button><button onClick={() => setPage(4)}>导出</button></div>
-          </section>
-        </div>)}
+            </>} />)}
         {page === 3 && (!doc ? <p className="muted">请先取回转写结果。</p> : <div className="columns editor">
           <section className="panel stack"><h2>候选稿</h2>
             <select aria-label="候选稿" value={candidateId} onChange={e => { if (draftDirty) setError('请先保存稿件编辑。'); else setCandidateId(e.target.value); }}>
@@ -510,7 +616,7 @@ function App() {
                 const text = e.target.value;
                 setDraftChanges(before => { const next = { ...before }; if (text === block.text) delete next[index]; else next[index] = text; return next; });
               }} /></label>
-              <div className="row">{currentCandidate && block.sourceSegmentIds.map(id => { const source = doc.segments.find(s => s.id === id); return source && <button key={id} onClick={() => { seek(id, source.startMs); setPage(2); }}>回听 {duration(source.startMs)}</button>; })}</div>
+              <div className="row">{currentCandidate && block.sourceSegmentIds.map(id => { const source = doc.segments.find(s => s.id === id); return source && <button key={id} onClick={() => { seek(id, source.startMs); setRevealId(id); setPage(2); }}>回听 {duration(source.startMs)}</button>; })}</div>
             </div>)}
             {candidate && <div className="row"><button disabled={busy || !draftDirty} onClick={() => void action(async () => {
               await api.saveCandidate(candidate.id, candidate.revision, candidate.draft.blocks.map((block, i) => draftChanges[i] ?? block.text));
@@ -523,7 +629,7 @@ function App() {
             <label>类型<select value={draftType} onChange={e => setDraftType(e.target.value)}><option value="spokenScript">口播稿</option><option value="literaryScript">文学剧本</option></select></label>
             <label>方式<select value={mode} onChange={e => setMode(e.target.value)}><option value="faithful">忠实整理</option><option value="creative">创作改编</option></select></label>
             {attached && !capabilities?.operations.includes('organize') && <p className="muted">比格熊整理服务尚未就绪，请检查默认文本模型。</p>}
-            <button className="primary" disabled={busy || dirty || draftDirty || !serviceMatches || !capabilities?.operations.includes('organize') || !doc.segments.length} onClick={() => void action(async () => {
+            <button className="primary" disabled={busy || dirty || draftDirty || !!draft?.reviewGroups.length || !serviceMatches || !capabilities?.operations.includes('organize') || !doc.segments.length} onClick={() => void action(async () => {
               try { await api.organize(projectId, doc.revision, draftType, mode); } finally { await loadJobs(); setPage(1); }
             })}>生成候选稿</button>
           </section>
@@ -540,14 +646,52 @@ function App() {
             {exportSource !== 'candidate' && <label>范围<select value={selectionOnly ? 'current' : 'all'} onChange={e => setSelectionOnly(e.target.value === 'current')}>
               <option value="all">全部字幕</option><option value="current" disabled={!active}>当前字幕所在时间范围</option>
             </select></label>}
-            <button className="primary" disabled={busy || (exportSource !== 'original' && dirty) || (exportSource === 'candidate' && (!candidate?.accepted || !currentCandidate || draftDirty))} onClick={() => void action(async () => {
+            <button className="primary" disabled={busy || (exportSource !== 'original' && dirty) || (exportSource !== 'candidate' && selectionOnly && !range) || (exportSource === 'candidate' && (!candidate?.accepted || !currentCandidate || draftDirty))} onClick={() => void action(async () => {
               const path = await save({ defaultPath: `${project?.name.replace(/\.[^.]+$/, '') ?? 'bgxiong-any2text'}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] });
               if (!path) return;
-              const saved = exportSource === 'candidate' && candidate ? await api.exportCandidate(candidate.id, format, path) : await api.export(projectId, exportSource === 'original', format, path, range);
+              const saved = exportSource === 'candidate' && candidate ? await api.exportCandidate(candidate.id, format, path) : await api.export(projectId, exportSource === 'original', format, path, range, expectedExport);
               setNotice(`已导出 ${saved}`);
             })}>保存到文件</button>
           </section><section className="panel stack"><h2>内容预览</h2><pre>{preview}</pre></section>
         </div>)}
+        {jobToDelete && <NativeDialog title="清理任务" onClose={() => setJobToDelete(undefined)} className="subtitle-dialog">
+          <p>{jobToDelete.request.operation.kind === 'transcribe'
+            ? '将删除该任务及关联的本地字幕、校订和整理稿。原始素材与手动导出的文件会保留。'
+            : '将删除该任务及其本地整理稿。来源字幕、原始素材与手动导出的文件会保留。'}</p>
+          <div className="row">
+            <Btn variant="ghost" onClick={() => setJobToDelete(undefined)}>取消</Btn>
+            <Btn variant="danger" disabled={busy} onClick={() => {
+              const job = jobToDelete;
+              setJobToDelete(undefined);
+              void action(async () => {
+                try { await api.deleteJob(job.request.clientRequestId); }
+                finally {
+                  await Promise.all([loadJobs(), loadProjects(), projectId ? reloadCandidates(projectId) : Promise.resolve()]);
+                }
+                setNotice('任务及本地生成文件已清理');
+              });
+            }}>确认清理</Btn>
+          </div>
+        </NativeDialog>}
+        {pendingDeparture && <NativeDialog title="保存当前编辑" onClose={() => setPendingDeparture(undefined)} className="subtitle-dialog">
+          <div className="row">
+            <Btn disabled={busy} onClick={() => void action(async () => {
+              const savedRevision = await persistSubtitle();
+              if (draftDirty && candidate) {
+                const saved = await api.saveCandidate(candidate.id, candidate.revision, candidate.draft.blocks.map((block, index) => draftChanges[index] ?? block.text));
+                setCandidates(rows => rows.map(row => row.id === saved.id ? saved : row));
+                setDraftChanges({});
+              }
+              setPendingDeparture(undefined); history.current = [];
+              window.setTimeout(() => pendingDeparture(savedRevision), 0);
+            })}>保存后继续</Btn>
+            <Btn variant="danger" disabled={busy} onClick={() => {
+              setEdited(undefined); setDraftChanges({}); history.current = [];
+              setPendingDeparture(undefined); pendingDeparture();
+            }}>放弃修改</Btn>
+            <Btn variant="ghost" onClick={() => setPendingDeparture(undefined)}>返回编辑</Btn>
+          </div>
+        </NativeDialog>}
       </main>
     </div>
   </div></>;

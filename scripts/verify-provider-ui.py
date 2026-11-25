@@ -27,7 +27,14 @@ window.__TAURI_INTERNALS__ = {
     }
     if (cmd === 'provider_health' && !f.online) throw '比格熊服务未启动';
     if (cmd === 'provider_appearance') return 'dark';
-    if (cmd === 'projects' || cmd === 'jobs') return [];
+    if (cmd === 'provider_shortcut_bindings') {
+      if (f.bindings === 'error') throw 'old bridge';
+      return {schemaVersion:1, bindings:f.bindings ?? {}};
+    }
+    if (cmd === 'projects') return f.documents ? [{id:'project', name:'Fixture', original:'original',
+      input:{durationMs:2000,audioTracks:[]}}] : [];
+    if (cmd === 'document') return f.documents;
+    if (cmd === 'jobs' || cmd === 'revisions' || cmd === 'candidates') return [];
     if (cmd === 'launch_bigbear') { f.online = true; return true; }
     return null;
   }
@@ -68,7 +75,7 @@ def main():
                 expect(page.locator('#provider-panel')).to_have_count(0)
             page.set_viewport_size({'width': 1280, 'height': 850})
             status.click()
-            page.get_by_role('heading', name='导入素材').click()
+            page.get_by_role('navigation').get_by_role('button', name='导入素材').click()
             expect(page.locator('#provider-panel')).to_have_count(0)
             status.click()
             page.get_by_role('button', name='断开连接', exact=True).click()
@@ -98,6 +105,36 @@ def main():
             expect(status).to_have_text('比格熊 · 已连接', timeout=7000)
             assert not errors, errors
             print('PASS: startup, retry, recovery, manual disconnect/reconnect, launch, single flight, overlay at 3 widths, Escape and outside dismissal')
+            shortcuts = browser.new_page(viewport={'width': 1280, 'height': 850})
+            shortcuts.add_init_script(MOCK + """
+              const entries = [
+                {id:'one',startMs:0,endMs:1000,text:'第一段',sourceIds:['one']},
+                {id:'two',startMs:1000,endMs:2000,text:'第二段',sourceIds:['two']}
+              ];
+              fixture.documents = {revision:'original',original:'original',entries,segments:entries,reviewGroups:[],waveformPeaks:[]};
+            """)
+            shortcuts.goto(f'http://127.0.0.1:{server.server_port}')
+            shortcuts.get_by_role('navigation').get_by_role('button', name='字幕校对').click()
+            next_button = shortcuts.get_by_role('button', name='下一段', exact=True)
+            editor = shortcuts.get_by_label('当前字幕')
+            expect(editor).to_have_text('第一段')
+            expect(next_button).to_have_attribute('aria-keyshortcuts', 'Alt+Shift+ArrowDown')
+            shortcuts.evaluate("fixture.bindings = {'any2text.nextSegment':{code:'F8'}}; dispatchEvent(new Event('focus'));")
+            expect(next_button).to_have_attribute('aria-keyshortcuts', 'F8')
+            shortcuts.keyboard.press('Alt+Shift+ArrowDown')
+            expect(editor).to_have_text('第一段')
+            shortcuts.keyboard.press('F8')
+            expect(editor).to_have_text('第二段')
+            shortcuts.get_by_role('button', name='上一段', exact=True).click()
+            shortcuts.evaluate("fixture.bindings = {'any2text.nextSegment':null}; dispatchEvent(new Event('focus'));")
+            expect(next_button).not_to_have_attribute('aria-keyshortcuts', 'F8')
+            shortcuts.evaluate("fixture.bindings = 'error'; dispatchEvent(new Event('focus'));")
+            shortcuts.keyboard.press('F8')
+            expect(editor).to_have_text('第一段')
+            shortcuts.evaluate("fixture.bindings = {}; dispatchEvent(new Event('focus'));")
+            expect(next_button).to_have_attribute('aria-keyshortcuts', 'Alt+Shift+ArrowDown')
+            assert not errors, errors
+            print('PASS: focus reload, remap, unbind, old bridge, default restore and actual dispatch')
             browser.close()
     finally:
         server.shutdown()

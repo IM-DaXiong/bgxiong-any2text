@@ -47,7 +47,15 @@ export interface LocalJob {
 
 export interface Segment { id: string; startMs: number; endMs: number; text: string }
 export interface TimeRange { startMs: number; endMs: number }
-export interface Document { revision: string; original: string; segments: Segment[]; waveformPeaks: number[] }
+export type SubtitleEntry = Pick<Segment, 'id' | 'text'> & { sourceIds: string[] } &
+  (TimeRange & { reviewGroupId?: never } | { reviewGroupId: string; startMs?: never; endMs?: never });
+export interface ReviewGroup extends TimeRange {
+  id: string;
+  memberIds: string[];
+  boundaries: { suggestedMs: number; ready: boolean }[];
+}
+export interface Correction { schemaVersion: 2; entries: SubtitleEntry[]; reviewGroups: ReviewGroup[] }
+export interface Document { entries: SubtitleEntry[]; reviewGroups: ReviewGroup[]; revision: string; original: string; segments: Segment[]; waveformPeaks: number[] }
 export interface DocumentRevision { id: string; kind: 'original' | 'correction' }
 export interface Candidate {
   id: string;
@@ -66,6 +74,7 @@ export const api = {
   connect: () => invoke<Capabilities>('connect'),
   disconnect: () => invoke<void>('disconnect'),
   health: () => invoke<void>('provider_health'),
+  shortcutBindings: () => invoke<unknown>('provider_shortcut_bindings'),
   appearance: () => invoke<string | null>('provider_appearance'),
   launchBigBear: (executable?: string) => invoke<boolean>('launch_bigbear', { executable: executable ?? null }),
   projects: () => invoke<Project[]>('projects'),
@@ -76,6 +85,7 @@ export const api = {
   relocate: (projectId: string, path: string) => invoke<Project>('relocate_media', { projectId, path }),
   copyMedia: (projectId: string) => invoke<Project>('copy_media', { projectId }),
   playback: (projectId: string) => invoke<string>('playback_path', { projectId }),
+  deleteJob: (requestId: string) => invoke<void>('delete_job', { requestId }),
   jobs: () => invoke<LocalJob[]>('jobs'),
   submit: (projectId: string, modelConfigId: string, audioTrack: number, language: string) =>
     invoke<LocalJob>('submit_transcription', { projectId, modelConfigId, audioTrack, language }),
@@ -86,11 +96,13 @@ export const api = {
   document: (projectId: string, original = false) => invoke<Document>('document', { projectId, original }),
   revisions: (projectId: string) => invoke<DocumentRevision[]>('revisions', { projectId }),
   checkout: (projectId: string, revision: string, expectedRevision: string) => invoke<Project>('checkout_revision', { projectId, revision, expectedRevision }),
+  saveSubtitleRevision: (projectId: string, expectedRevision: string, correction: Correction) =>
+    invoke<Document>('save_subtitle_revision', { projectId, expectedRevision, correction }),
   saveCorrection: (projectId: string, expectedRevision: string, changes: Record<string, string>) =>
     invoke<Document>('save_correction', { projectId, expectedRevision, changes }),
-  preview: (projectId: string, original: boolean, format: string, range: TimeRange | null) => invoke<string>('preview_export', { projectId, original, format, range }),
-  export: (projectId: string, original: boolean, format: string, path: string, range: TimeRange | null) =>
-    invoke<string>('export_document', { projectId, original, format, path, range }),
+  preview: (projectId: string, original: boolean, format: string, range: TimeRange | null, expectedRevision?: string) => invoke<string>('preview_export', { projectId, original, format, range, expectedRevision }),
+  export: (projectId: string, original: boolean, format: string, path: string, range: TimeRange | null, expectedRevision?: string) =>
+    invoke<string>('export_document', { projectId, original, format, path, range, expectedRevision }),
   organize: (projectId: string, expectedRevision: string, draftType: string, mode: string) =>
     invoke<LocalJob>('submit_organize', { projectId, expectedRevision, draftType, mode }),
   candidates: (projectId: string) => invoke<Candidate[]>('candidates', { projectId }),

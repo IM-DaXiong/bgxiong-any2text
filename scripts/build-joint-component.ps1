@@ -10,7 +10,9 @@ try {
     $hostRoot = Join-Path (Split-Path -Parent $root) 'bgxiong-ai-story'
     if (Test-Path -LiteralPath (Join-Path $hostRoot 'ui/src/theme/themeRegistry.ts')) {
         & node scripts/sync-bigbear-theme.mjs --check
-        if ($LASTEXITCODE -ne 0) { throw 'Any2Text theme assets differ from the BigBear source.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Any2Text theme or shortcuts differ from the BigBear source.' }
+        & node (Join-Path $hostRoot 'ui/scripts/pack-standalone-chrome.mjs') (Join-Path $root 'vendor') --check
+        if ($LASTEXITCODE -ne 0) { throw 'Any2Text shared chrome differs from the BigBear source.' }
     }
     & npm.cmd ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'Any2Text dependency installation failed.' }
@@ -24,7 +26,12 @@ try {
     $exe = Join-Path $output 'bgxiong-any2text.exe'
     Copy-Item -LiteralPath (Join-Path $target 'release/bgxiong-any2text.exe') -Destination $exe
     $schema = Join-Path $root 'contracts/v1/service-provider.schema.json'
+    $shortcut = Join-Path $root 'ui/src/shortcuts/any2text-shortcuts.generated.json'
+    $chrome = (Get-Content -Raw -LiteralPath (Join-Path $root 'package.json') | ConvertFrom-Json).dependencies.'@bgxiong/standalone-chrome'
+    $chromePath = Join-Path $root $chrome.Substring('file:'.Length)
     $receipt = [ordered]@{
+        shortcutSha256 = (Get-FileHash -LiteralPath $shortcut -Algorithm SHA256).Hash.ToLowerInvariant()
+        chromeSha256 = (Get-FileHash -LiteralPath $chromePath -Algorithm SHA256).Hash.ToLowerInvariant()
         schemaVersion = 1
         sourceCommit = $source
         sourceDirty = [bool](& git status --porcelain --untracked-files=normal)

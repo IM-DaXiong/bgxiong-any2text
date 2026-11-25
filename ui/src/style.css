@@ -86,3 +86,23 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 480px; overflo
   nav { display: flex; flex-wrap: wrap; }
   .segments { max-height: 260px; }
 }
+
+.subtitle-shell { height: calc(100dvh - 32px); min-height: 0; }
+.subtitle-shell .main { min-height: 0; display: flex; flex-direction: column; }
+.subtitle-shell main { flex: 1; min-height: 0; max-width: none; margin: 0; display: flex; flex-direction: column; }
+.subtitle-workspace { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; flex: 1; min-height: 0; }
+.subtitle-pane { display: flex; flex-direction: column; min-height: 0; gap: 10px; overflow: auto; }
+.subtitle-pane > :not(.subtitle-rows) { flex: 0 0 auto; }
+.subtitle-pane audio { min-height: 38px; }
+.subtitle-rows { flex: 1 1 auto; min-height: 100px; overflow-y: auto; }
+.subtitle-text, .subtitle-rows span, .subtitle-boundary p, .subtitle-preview p { white-space: pre-wrap; overflow-wrap: anywhere; line-break: strict; min-width: 0; }
+.subtitle-dialog { max-width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.subtitle-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.subtitle-dialog > * + *, .subtitle-boundary > * + * { margin-block-start: 10px; }
+.subtitle-preview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.subtitle-preview p { padding-block: 4px; border-bottom: 1px solid var(--border); }
+@media (max-width: 849px) {
+  .subtitle-shell { height: auto; }
+  .subtitle-workspace { grid-template-columns: minmax(0,1fr); }
+  .subtitle-rows { max-height: min(45dvh,360px); }
+}

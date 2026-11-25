@@ -5,6 +5,10 @@ so the harness can read the exact files written by the desktop application.
 """
 
 import argparse
+import hashlib
+import sqlite3
+import uuid
+import wave
 import json
 import os
 import pathlib
@@ -93,8 +97,119 @@ def wait_result(page, timeout):
     ready.first.click()
 
 
+
+def seed_subtitle_review(workspace):
+    project_id, revision, request, attempt = (str(uuid.uuid4()) for _ in range(4))
+    workspace.mkdir(parents=True, exist_ok=False)
+    project_root = workspace / "projects" / project_id
+    project_root.mkdir(parents=True)
+    media = (workspace / "review.wav").resolve()
+    sample_rate, seconds = 8000, 90
+    with wave.open(str(media), "wb") as audio:
+        audio.setparams((1, 2, sample_rate, 0, "NONE", "not compressed"))
+        audio.writeframes(bytes(sample_rate * seconds * 2))
+    fingerprint = hashlib.sha256(media.read_bytes()).hexdigest()
+    segments = [dict(id=f"s{i}", startMs=i * 1000, endMs=(i+1) * 1000, text=f"第{i}段甲。乙。") for i in range(82)]
+    transcript = dict(schemaVersion=1, sourceFingerprint=fingerprint, durationMs=seconds * 1000,
+        timeOrigin="sourceMedia", timingQuality="segmentTimed", provenance={}, segments=segments,
+        waveformPeaks=[0.2] * 40)
+    payload = json.dumps(transcript, ensure_ascii=False).encode()
+    (project_root / f"{revision}.json").write_bytes(payload)
+    legacy_revision = str(uuid.uuid4())
+    (project_root / f"{legacy_revision}.json").write_text(json.dumps({"s0":"第0段甲。乙。"}, ensure_ascii=False), encoding="utf-8")
+    project = dict(id=project_id, name=media.name, mediaPath=str(media), providerId="bigbear",
+        serviceId="test", input=dict(inputRef=fingerprint, fingerprint=fingerprint, durationMs=seconds * 1000,
+            audioTracks=[dict(index=0,codec="pcm_s16le")]), original=revision, correction=legacy_revision)
+    job = dict(projectId=project_id, providerId="bigbear", serviceId="test",
+        request=dict(clientRequestId=request, operation=dict(kind="transcribe")), document=revision,
+        remote=dict(taskId="test", attemptId=attempt, clientRequestId=request, status="resultReady", committedMs=seconds*1000,
+            durationMs=seconds*1000, result=dict(bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())))
+    with sqlite3.connect(workspace / "workspace.sqlite3") as db:
+        db.executescript("CREATE TABLE projects (id TEXT PRIMARY KEY, body TEXT NOT NULL);"
+            "CREATE TABLE jobs (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), body TEXT NOT NULL);"
+            "CREATE TABLE revisions (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), kind TEXT NOT NULL, parent TEXT, source TEXT);")
+        db.execute("INSERT INTO projects VALUES (?,?)", (project_id, json.dumps(project)))
+        db.execute("INSERT INTO jobs VALUES (?,?,?)", (request, project_id, json.dumps(job)))
+        db.execute("INSERT INTO revisions VALUES (?,?,?,?,?)", (revision, project_id, "original", None, None))
+        db.execute("INSERT INTO revisions VALUES (?,?,?,?,?)", (legacy_revision, project_id, "correction", revision, revision))
+
+
+def check_subtitle_review(page, args, checks):
+    project = ipc(page, "projects")[0]
+    before = ipc(page, "jobs")
+    original = ipc(page, "document", {"projectId":project["id"], "original":True})
+    page.get_by_role("navigation").get_by_role("button", name="字幕校对").click()
+    editor = page.get_by_label("当前字幕")
+    expect(editor).to_have_text("第0段甲。乙。")
+    for term in ("第0段甲", "第81段甲"):
+        search = page.get_by_role("searchbox", name="搜索字幕")
+        search.fill(term)
+        page.locator("[data-subtitle-row] button").click()
+        editor.press("Home")
+        for _ in range(5):
+            editor.press("ArrowRight")
+        page.get_by_role("button", name="在光标处拆段").click()
+        search.clear()
+    page.get_by_role("button", name="保存校订").click()
+    expect(page.get_by_text("已保存 · 时间待复核", exact=True)).to_be_visible()
+    saved = ipc(page, "document", {"projectId":project["id"], "original":False})
+    assert len(saved["reviewGroups"]) == 2, saved["reviewGroups"]
+    page.reload(wait_until="domcontentloaded")
+    page.get_by_role("navigation").get_by_role("button", name="字幕校对").click()
+    expect(page.get_by_role("button", name="复核当前段")).to_be_enabled()
+    page.get_by_role("button", name="复核当前段").click()
+    dialog = page.get_by_role("dialog")
+    page.wait_for_function("document.querySelector('audio')?.readyState >= 2")
+    dialog.get_by_role("button", name="循环试听").click()
+    page.wait_for_function("!document.querySelector('audio').paused")
+    page.wait_for_timeout(1200)
+    assert page.locator("audio").evaluate("(audio) => audio.currentTime >= 0 && audio.currentTime <= 1.15")
+    dialog.get_by_role("button", name="停止").click()
+    assert page.locator("audio").evaluate("(audio) => audio.paused")
+    checks.append("bounded local playback loops only within the first review group and stops")
+    page.screenshot(path=str(args.output / "review-current.png"))
+    dialog.get_by_role("button", name="认可此分界").click()
+    dialog.get_by_role("button", name="确认时间").click()
+    expect(dialog).to_have_count(0)
+    page.get_by_role("button", name="复核全部").click()
+    page.screenshot(path=str(args.output / "review-all.png"))
+    dialog.get_by_role("button", name="确认时间").click()
+    expect(dialog.get_by_role("alert")).to_be_visible()
+    dialog.get_by_role("button", name="认可此分界").click()
+    dialog.get_by_role("button", name="确认时间").click()
+    expect(dialog).to_have_count(0)
+    page.get_by_role("button", name="保存校订").click()
+    expect(page.get_by_text("已保存", exact=True)).to_be_visible()
+    exported = args.output / "review.srt"
+    ipc(page, "export_document", {"projectId":project["id"], "original":False, "format":"srt", "path":str(exported), "range":None})
+    assert " --> " in exported.read_text(encoding="utf-8")
+    assert not ipc(page, "document", {"projectId":project["id"], "original":False})["reviewGroups"]
+    assert ipc(page, "document", {"projectId":project["id"], "original":True}) == original
+    assert ipc(page, "jobs") == before
+    checks.append("structural corrections retained across restart, reviewed across pages and exported without a new job")
+    check_layout(page)
+    checks.append("all pages fit the four reference widths")
+    page.get_by_role("navigation").get_by_role("button", name="任务队列").click()
+    for name in ("导入素材", "任务队列", "字幕校对", "整理成稿", "导出交付"):
+        expect(page.get_by_role("heading", name=name, exact=True)).to_have_count(0)
+    page.get_by_role("button", name="清理任务").click()
+    page.get_by_role("dialog").get_by_role("button", name="取消").click()
+    assert ipc(page, "jobs") == before
+    page.get_by_role("button", name="清理任务").click()
+    page.get_by_role("dialog").get_by_role("button", name="确认清理").click()
+    expect(page.get_by_role("button", name="清理任务")).to_have_count(0)
+    assert ipc(page, "jobs") == []
+    workspace = args.workspace or args.output / "workspace"
+    assert not list((workspace / "projects" / project["id"]).glob("*.json"))
+    assert pathlib.Path(project["mediaPath"]).is_file()
+    assert exported.is_file()
+    checks.append("queue deletion removes owned revisions, preserves source media and explicit exports, and duplicate headings are gone")
+
+
 def run(args):
     args.output.mkdir(parents=True, exist_ok=False)
+    if args.subtitle_review and not args.workspace:
+        seed_subtitle_review(args.output / "workspace")
     proc = start(args)
     checks = []
     errors = []
@@ -103,8 +218,10 @@ def run(args):
             browser = attach(playwright, args.debug_port)
             page = browser.contexts[0].pages[0]
             page.on("pageerror", lambda error: errors.append(str(error)))
-            expect(page.get_by_role("heading", name="导入素材")).to_be_visible(timeout=12000)
-            if args.incompatible:
+            expect(page.get_by_role("navigation").get_by_role("button", name="导入素材")).to_be_visible(timeout=12000)
+            if args.subtitle_review:
+                check_subtitle_review(page, args, checks)
+            elif args.incompatible:
                 page.get_by_role("button", name="连接比格熊").click()
                 expect(page.get_by_role("alert")).to_contain_text("未提供 Any2Text v1 服务", timeout=10000)
                 expect(page.get_by_role("button", name="开始转写")).to_be_disabled()
@@ -178,7 +295,7 @@ def run(args):
                     page.get_by_role("button", name="开始转写").click()
                 wait_result(page, args.transcribe_timeout * 1000)
                 expect(page.get_by_role("heading", name="字幕校对")).to_be_visible(timeout=20000)
-                expect(page.get_by_label("当前字幕")).not_to_have_value("")
+                expect(page.get_by_label("当前字幕")).not_to_have_text("")
                 page.locator("audio").evaluate("audio => { if (audio.readyState < 1) return new Promise((resolve, reject) => { audio.addEventListener('loadedmetadata',resolve,{once:true}); audio.addEventListener('error',reject,{once:true}); setTimeout(() => reject(new Error('audio metadata timeout')),12000); }); }")
                 original = ipc(page, "document", {"projectId": project["id"], "original": True})
                 if args.long_document:
@@ -201,7 +318,7 @@ def run(args):
                     expect(page.get_by_role("button", name="波形细节")).to_have_attribute("aria-pressed", "true")
                 page.get_by_label("搜索字幕").fill(original["segments"][0]["text"])
                 page.locator(".segments button").first.click()
-                expect(page.get_by_label("当前字幕")).to_have_value(original["segments"][0]["text"])
+                expect(page.get_by_label("当前字幕")).to_have_text(original["segments"][0]["text"])
                 page.get_by_label("当前字幕").fill("本地校订验收。")
                 expect(page.get_by_role("button", name="保存校订")).to_be_enabled()
                 page.get_by_role("button", name="保存校订").click()
@@ -277,13 +394,18 @@ def run(args):
                     "changes": {current["segments"][0]["id"]: "同一原文已在另一窗口更新。"}})
                 page.get_by_role("button", name="保存校订").click()
                 expect(page.get_by_role("alert")).to_contain_text("版本")
-                expect(page.get_by_label("当前字幕")).to_have_value(pending)
+                expect(page.get_by_label("当前字幕")).to_have_text(pending)
                 checks.append("a stale revision left the unsaved editor text intact")
             page.screenshot(path=str(args.output / "desktop.png"))
+            if args.subtitle_review:
+                page.get_by_role("group", name="窗口控制").locator('button[title="关闭"]').click()
+                assert proc.wait(timeout=10) == 0
+                checks.append("title-bar close exits the native window")
             assert not errors, errors
     finally:
-        proc.terminate()
-        proc.wait(timeout=15)
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait(timeout=15)
         (args.output / "results.json").write_text(json.dumps({"checks":checks,"pageErrors":errors}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -304,4 +426,5 @@ if __name__ == "__main__":
     parser.add_argument("--incompatible", action="store_true")
     parser.add_argument("--offline-existing", action="store_true")
     parser.add_argument("--resume-existing", action="store_true")
+    parser.add_argument("--subtitle-review", action="store_true")
     run(parser.parse_args())

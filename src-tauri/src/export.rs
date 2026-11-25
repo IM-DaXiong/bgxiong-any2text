@@ -53,28 +53,47 @@ pub fn render(
     original: bool,
     format: &str,
     range: Option<TimeRange>,
+    expected_revision: Option<Uuid>,
 ) -> Result<String, String> {
     let mut document = workspace.document(project, original)?;
+    if expected_revision.is_some_and(|expected| expected != document.revision) {
+        return Err("文稿版本已改变，请刷新预览".into());
+    }
     if let Some(range) = range {
         if range.start_ms >= range.end_ms
             || range.end_ms > workspace.project(project)?.input.duration_ms
         {
             return Err("导出范围超出素材时长".into());
         }
-        document
-            .segments
-            .retain(|segment| segment.end_ms > range.start_ms && segment.start_ms < range.end_ms);
-        if document.segments.is_empty() {
-            return Err("选定范围内没有字幕".into());
-        }
+    }
+    let intersects = |start: u64, end: u64| {
+        range.is_none_or(|r| end > r.start_ms && start < r.end_ms)
+    };
+    let pending: std::collections::HashSet<_> = document.review_groups.iter()
+        .filter(|group| intersects(group.start_ms, group.end_ms))
+        .map(|group| group.id.as_str()).collect();
+    if format == "txt" {
+        let lines: Vec<_> = document.entries.iter().filter(|entry| {
+            if let Some(group) = &entry.review_group_id {
+                pending.contains(group.as_str())
+            } else {
+                entry.start_ms.zip(entry.end_ms).is_some_and(|(start, end)| intersects(start, end))
+            }
+        }).map(|entry| entry.text.as_str()).collect();
+        return if range.is_some() && lines.is_empty() {
+            Err("选定范围内没有字幕".into())
+        } else {
+            Ok(lines.join("\n"))
+        };
+    }
+    if !pending.is_empty() {
+        return Err("请先复核导出范围内的字幕时间".into());
+    }
+    document.segments.retain(|segment| intersects(segment.start_ms, segment.end_ms));
+    if range.is_some() && document.segments.is_empty() {
+        return Err("选定范围内没有字幕".into());
     }
     match format {
-        "txt" => Ok(document
-            .segments
-            .iter()
-            .map(|s| s.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n")),
         "srt" => Ok(subtitle_lines(&document.segments, false)),
         "vtt" => Ok(subtitle_lines(&document.segments, true)),
         "json" => {

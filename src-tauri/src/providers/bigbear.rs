@@ -227,6 +227,14 @@ impl ServiceProvider for BigBear {
         Ok(())
     }
 
+    async fn shortcut_bindings(&self) -> Result<serde_json::Value, String> {
+        let session = self.connection(None).await?;
+        let response = self.client.get(join(&session.base, "shortcut-bindings")?)
+            .bearer_auth(&session.token).timeout(Duration::from_secs(3))
+            .send().await.map_err(network)?;
+        decode(response).await
+    }
+
     async fn appearance(&self) -> Result<Option<String>, String> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]

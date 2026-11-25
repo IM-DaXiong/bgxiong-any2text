@@ -71,6 +71,11 @@ pub async fn provider_health(app: State<'_, Application>) -> Result<(), String> 
 }
 
 #[tauri::command]
+pub async fn provider_shortcut_bindings(app: State<'_, Application>) -> Result<serde_json::Value, String> {
+    app.provider.shortcut_bindings().await
+}
+
+#[tauri::command]
 pub async fn provider_appearance(app: State<'_, Application>) -> Result<Option<String>, String> {
     app.service()?.appearance().await
 }
@@ -311,6 +316,12 @@ pub async fn retrieve(app: State<'_, Application>, request_id: Uuid) -> Result<P
 }
 
 #[tauri::command]
+pub async fn delete_job(app: State<'_, Application>, request_id: Uuid) -> Result<(), String> {
+    let _guard = app.job_operations.lock().await;
+    app.workspace.delete_job(request_id)
+}
+
+#[tauri::command]
 pub fn document(
     app: State<'_, Application>,
     project_id: Uuid,
@@ -350,14 +361,25 @@ pub fn save_correction(
 }
 
 #[tauri::command]
+pub fn save_subtitle_revision(
+    app: State<'_, Application>,
+    project_id: Uuid,
+    expected_revision: Uuid,
+    correction: crate::subtitle_correction::Correction,
+) -> Result<Document, String> {
+    app.workspace.save_subtitle_revision(project_id, expected_revision, correction)
+}
+
+#[tauri::command]
 pub fn preview_export(
     app: State<'_, Application>,
     project_id: Uuid,
     original: bool,
     format: String,
     range: Option<crate::export::TimeRange>,
+    expected_revision: Option<Uuid>,
 ) -> Result<String, String> {
-    crate::export::render(&app.workspace, project_id, original, &format, range)
+    crate::export::render(&app.workspace, project_id, original, &format, range, expected_revision)
 }
 
 #[tauri::command]
@@ -368,8 +390,9 @@ pub fn export_document(
     format: String,
     path: PathBuf,
     range: Option<crate::export::TimeRange>,
+    expected_revision: Option<Uuid>,
 ) -> Result<PathBuf, String> {
-    let text = crate::export::render(&app.workspace, project_id, original, &format, range)?;
+    let text = crate::export::render(&app.workspace, project_id, original, &format, range, expected_revision)?;
     crate::export::save(&path, &format, &text)?;
     Ok(path)
 }
@@ -382,6 +405,13 @@ pub async fn submit_organize(
     draft_type: String,
     mode: String,
 ) -> Result<LocalJob, String> {
+    let document = app.workspace.document(project_id, false)?;
+    if document.revision != expected_revision || document.entries.is_empty() {
+        return Err("请先保存当前版本的校订".into());
+    }
+    if !document.review_groups.is_empty() {
+        return Err("请先复核全部字幕时间".into());
+    }
     let service = app.service()?;
     let project = app.workspace.project(project_id)?;
     let caps = service.connect().await?;
@@ -395,10 +425,6 @@ pub async fn submit_organize(
         || !matches!(mode.as_str(), "faithful" | "creative")
     {
         return Err("无效的稿件类型或整理方式".into());
-    }
-    let document = app.workspace.document(project_id, false)?;
-    if document.revision != expected_revision || document.segments.is_empty() {
-        return Err("请先保存当前版本的校订".into());
     }
     let snapshot = serde_json::to_vec(
         &json!({"sourceRevision":document.revision,"segments":document.segments}),
@@ -671,13 +697,59 @@ server.serve_forever()
                 edited.revision
             );
             assert_eq!(
-                crate::export::render(&app.workspace, project.id, false, "txt", None).unwrap(),
+                crate::export::render(&app.workspace, project.id, false, "txt", None, None).unwrap(),
                 "校订"
             );
             assert_eq!(
-                crate::export::render(&app.workspace, project.id, true, "txt", None).unwrap(),
+                crate::export::render(&app.workspace, project.id, true, "txt", None, None).unwrap(),
                 "原文"
             );
+            let pending: crate::subtitle_correction::Correction = serde_json::from_value(json!({
+                "schemaVersion":2,
+                "entries":[
+                    {"id":"s1","text":"校","sourceIds":["s1"],"reviewGroupId":"group"},
+                    {"id":"right","text":"订","sourceIds":["s1"],"reviewGroupId":"group"}
+                ],
+                "reviewGroups":[{"id":"group","memberIds":["s1","right"],"startMs":0,"endMs":1000,
+                    "boundaries":[{"suggestedMs":500,"ready":false}]}]
+            })).unwrap();
+            let pending = app.workspace.save_subtitle_revision(project.id, edited.revision, pending).unwrap();
+            let modified = app.workspace.save_correction(project.id, pending.revision,
+                HashMap::from([("right".into(), "订\n说明".into())])).unwrap();
+            assert_eq!(modified.review_groups.len(), 1);
+            assert!(modified.segments.is_empty());
+            assert!(crate::export::render(&app.workspace, project.id, false, "srt", None, Some(modified.revision)).is_err());
+            assert_eq!(crate::export::render(&app.workspace, project.id, false, "txt", None, Some(modified.revision)).unwrap(), "校\n订\n说明");
+            let mut entries = modified.entries;
+            for (index, entry) in entries.iter_mut().enumerate() {
+                entry.review_group_id = None;
+                entry.start_ms = Some(index as u64 * 500);
+                entry.end_ms = Some((index as u64 + 1) * 500);
+            }
+            let confirmed = app.workspace.save_subtitle_revision(project.id, modified.revision,
+                crate::subtitle_correction::Correction { schema_version: 2, entries, review_groups: vec![] }).unwrap();
+            let srt = crate::export::render(&app.workspace, project.id, false, "srt", None, Some(confirmed.revision)).unwrap();
+            assert!(srt.contains("00:00:00,500 --> 00:00:01,000\n订\n说明"));
+            assert!(crate::export::render(&app.workspace, project.id, false, "srt", None, Some(modified.revision)).is_err());
+            app.workspace.checkout(project.id, pending.revision, confirmed.revision).unwrap();
+            assert_eq!(app.workspace.document(project.id, false).unwrap().review_groups[0].member_ids, ["s1", "right"]);
+            std::fs::write(&project.media_path, b"source fixture").unwrap();
+            let active = app.workspace.add_job(&project,
+                Request { client_request_id: Uuid::new_v4(), operation: json!({"kind":"organize"}) },
+                Some(pending.revision)).unwrap();
+            assert!(app.workspace.delete_job(active.request.client_request_id).is_err());
+            assert!(app.workspace.delete_job(request_id).is_err());
+            let dependent = active.request.client_request_id;
+            app.workspace.update_job(dependent, Job { task_id: "dependent".into(), attempt_id: Uuid::new_v4(),
+                client_request_id: dependent, status: "cancelled".into(), committed_ms: 0, duration_ms: 1000,
+                error: None, result: None }).unwrap();
+            app.workspace.delete_job(request_id).unwrap();
+            assert!(app.workspace.jobs().unwrap().is_empty());
+            assert!(app.workspace.revisions(project.id).unwrap().is_empty());
+            assert!(std::fs::read_dir(app.workspace.directory(project.id)).unwrap().next().is_none());
+            assert_eq!(std::fs::read(&project.media_path).unwrap(), b"source fixture");
+
+
         });
     }
 }

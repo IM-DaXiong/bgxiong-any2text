@@ -1,3 +1,4 @@
+use crate::subtitle_correction::{Correction, Entry, ReviewGroup};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,8 @@ pub struct LocalJob {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Document {
+    pub entries: Vec<Entry>,
+    pub review_groups: Vec<ReviewGroup>,
     pub revision: Uuid,
     pub original: Uuid,
     pub segments: Vec<Segment>,
@@ -145,12 +148,12 @@ impl Workspace {
             CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS revisions (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), kind TEXT NOT NULL, parent TEXT, source TEXT);
-            CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), body TEXT NOT NULL);"
+            CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, project TEXT NOT NULL REFERENCES projects(id), body TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS job_file_cleanup (project TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(project,revision));"
         ).map_err(|e| e.to_string())?;
-        Ok(Self {
-            root,
-            db: Mutex::new(db),
-        })
+        let workspace = Self { root, db: Mutex::new(db) };
+        let _ = workspace.clean_job_files();
+        Ok(workspace)
     }
 
     fn database(&self) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
@@ -305,8 +308,14 @@ impl Workspace {
             document: None,
             source_revision,
         };
-        self.database()?
-            .execute(
+        let db = self.database()?;
+        if let Some(expected) = source_revision {
+            let current = Self::load_project(&db, project.id)?;
+            if current.correction.or(current.original) != Some(expected) {
+                return Err("文稿版本已改变，请重新载入".into());
+            }
+        }
+        db.execute(
                 "INSERT INTO jobs(id, project, body) VALUES(?1,?2,?3)",
                 params![id.to_string(), project.id.to_string(), encode(&job)?],
             )
@@ -353,6 +362,105 @@ impl Workspace {
             Ok(job)
         })
         .collect()
+    }
+
+    pub fn delete_job(&self, id: Uuid) -> AppResult<()> {
+        {
+            let mut db = self.database()?;
+            let tx = db.transaction().map_err(|error| error.to_string())?;
+            let job = Self::load_job(&tx, id)?;
+            let project = job.project_id.to_string();
+            let terminal = |job: &LocalJob| job.remote.as_ref().is_some_and(|remote|
+                matches!(remote.status.as_str(), "resultReady" | "failed" | "cancelled"));
+            if !terminal(&job) {
+                return Err("只有已结束的任务可以清理。".into());
+            }
+            let mut revisions = HashSet::new();
+            let mut candidates = HashSet::new();
+            let mut jobs = vec![id];
+            if let Some(result) = job.document {
+                let mut query = tx.prepare("SELECT id,kind,parent,source FROM revisions WHERE project=?1 ORDER BY rowid DESC").map_err(|e| e.to_string())?;
+                let rows = query.query_map([&project], |row| Ok((
+                    row.get::<_, String>(0)?, row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?, row.get::<_, Option<String>>(3)?,
+                ))).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+                let result = result.to_string();
+                revisions.insert(result.clone());
+                if job.source_revision.is_none() {
+                    revisions.extend(rows.iter().filter(|(_, kind, _, source)| kind == "correction" && source.as_deref() == Some(&result)).map(|(id, _, _, _)| id.clone()));
+                    let mut query = tx.prepare("SELECT body FROM jobs WHERE project=?1 AND id<>?2").map_err(|e|e.to_string())?;
+                    let bodies = query.query_map(params![project, id.to_string()], |row| row.get::<_, String>(0)).map_err(|e|e.to_string())?;
+                    for body in bodies {
+                        let dependent: LocalJob = decode(&body.map_err(|e|e.to_string())?)?;
+                        if dependent.source_revision.is_some_and(|source| revisions.contains(&source.to_string())) {
+                            if !terminal(&dependent) { return Err("有整理任务仍在使用这份字幕，请先结束该任务。".into()); }
+                            jobs.push(dependent.request.client_request_id);
+                            if let Some(candidate) = dependent.document { candidates.insert(candidate.to_string()); }
+                        }
+                    }
+                } else {
+                    candidates.insert(result);
+                }
+                revisions.extend(candidates.iter().cloned());
+                loop {
+                    let before = revisions.len();
+                    revisions.extend(rows.iter().filter(|(_, kind, parent, _)| kind == "draft"
+                        && parent.as_ref().is_some_and(|id| revisions.contains(id))).map(|(id, _, _, _)| id.clone()).collect::<Vec<_>>());
+                    if revisions.len() == before { break; }
+                }
+                let mut owner = Self::load_project(&tx, job.project_id)?;
+                if owner.original.is_some_and(|revision| revisions.contains(&revision.to_string())) {
+                    // Clear the deleted active document. Other originals remain available via their jobs.
+                    owner.original = rows.iter().find(|(id, kind, _, _)| kind == "original" && !revisions.contains(id))
+                        .map(|(id, _, _, _)| Uuid::parse_str(id)).transpose().map_err(|e| e.to_string())?;
+                    owner.correction = None;
+                    tx.execute("UPDATE projects SET body=?2 WHERE id=?1", params![project, encode(&owner)?]).map_err(|e| e.to_string())?;
+                }
+            }
+            for candidate in candidates {
+                tx.execute("DELETE FROM drafts WHERE project=?1 AND id=?2", params![project, candidate]).map_err(|e| e.to_string())?;
+            }
+            for revision in revisions {
+                tx.execute("INSERT OR IGNORE INTO job_file_cleanup VALUES(?1,?2)", params![project, revision]).map_err(|e| e.to_string())?;
+                tx.execute("DELETE FROM revisions WHERE project=?1 AND id=?2", params![project, revision]).map_err(|e| e.to_string())?;
+            }
+            for job in jobs {
+                tx.execute("DELETE FROM jobs WHERE id=?1", [job.to_string()]).map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        self.clean_job_files()
+    }
+
+    fn clean_job_files(&self) -> AppResult<()> {
+        let rows = {
+            let db = self.database()?;
+            let mut query = db.prepare("SELECT project,revision FROM job_file_cleanup").map_err(|e| e.to_string())?;
+            let rows = query.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        };
+        let mut failed = false;
+        for (project, revision) in rows {
+            let project_id = Uuid::parse_str(&project).map_err(|e| e.to_string())?;
+            let revision_id = Uuid::parse_str(&revision).map_err(|e| e.to_string())?;
+            let parent = self.directory(project_id);
+            let root = self.root.join("projects");
+            let safe = parent.canonicalize().ok().zip(root.canonicalize().ok()).is_some_and(|(parent, root)| parent == root.join(project_id.to_string()));
+            let path = parent.join(format!("{revision_id}.json"));
+            let removed = if safe {
+                match std::fs::remove_file(&path) {
+                    Ok(()) => true,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+                    Err(error) => { eprintln!("Any2Text cleanup failed for {path:?}: {error}"); false }
+                }
+            } else { !path.exists() };
+            if removed {
+                self.database()?.execute("DELETE FROM job_file_cleanup WHERE project=?1 AND revision=?2",
+                    params![project, revision]).map_err(|e| e.to_string())?;
+            } else { failed = true; }
+        }
+        if failed { Err("任务已移除，部分结果文件暂未清理。下次启动将重试。".into()) } else { Ok(()) }
     }
 
     pub fn update_job(&self, id: Uuid, remote: Job) -> AppResult<LocalJob> {
@@ -763,20 +871,31 @@ impl Workspace {
         };
         let transcript = self.read_original(id, original)?;
         validate_transcript(&transcript, &self.project(id)?)?;
-        let mut segments = transcript.segments;
+        let mut entries: Vec<_> = transcript.segments.iter().map(Entry::from).collect();
+        let mut review_groups = Vec::new();
         if revision != original {
-            let changes: HashMap<String, String> =
+            let payload: serde_json::Value =
                 read_file(&self.directory(id).join(format!("{revision}.json")))?;
-            for segment in &mut segments {
-                if let Some(text) = changes.get(&segment.id) {
-                    segment.text.clone_from(text)
+            if payload["schemaVersion"].is_number() {
+                let correction: Correction = serde_json::from_value(payload).map_err(|e| e.to_string())?;
+                correction.validate(&transcript.segments, transcript.duration_ms)?;
+                entries = correction.entries;
+                review_groups = correction.review_groups;
+            } else {
+                let changes: HashMap<String, String> = serde_json::from_value(payload).map_err(|e| e.to_string())?;
+                for entry in &mut entries {
+                    if let Some(text) = changes.get(&entry.id) {
+                        entry.text.clone_from(text);
+                    }
                 }
             }
         }
         Ok(Document {
             revision,
             original,
-            segments,
+            segments: entries.iter().filter_map(Entry::timed).collect(),
+            entries,
+            review_groups,
             waveform_peaks: transcript.waveform_peaks,
         })
     }
@@ -788,35 +907,41 @@ impl Workspace {
         changes: HashMap<String, String>,
     ) -> AppResult<Document> {
         let document = self.document(id, false)?;
+        let current_ids: HashSet<_> = document.entries.iter().map(|s| s.id.as_str()).collect();
+        if changes.keys().any(|id| !current_ids.contains(id.as_str())) {
+            return Err("校订包含未知字幕".into());
+        }
+        let mut entries = document.entries;
+        for entry in &mut entries {
+            if let Some(text) = changes.get(&entry.id) {
+                entry.text.clone_from(text);
+            }
+        }
+        self.save_subtitle_revision(id, expected, Correction {
+            schema_version: 2, entries, review_groups: document.review_groups,
+        })
+    }
+
+    pub fn save_subtitle_revision(
+        &self, id: Uuid, expected: Uuid, correction: Correction,
+    ) -> AppResult<Document> {
+        let document = self.document(id, false)?;
         if document.revision != expected {
             return Err("文稿版本已改变，请重新载入".into());
         }
-        let mut segments = document.segments;
-        let current_ids: HashSet<_> = segments.iter().map(|s| s.id.as_str()).collect();
-        if changes.iter().any(|(id, text)| {
-            !current_ids.contains(id.as_str()) || text.trim().is_empty() || text.len() > 64 * 1024
-        }) {
-            return Err("校订包含未知字幕或无效文本".into());
-        }
-        for segment in &mut segments {
-            if let Some(text) = changes.get(&segment.id) {
-                segment.text.clone_from(text)
+        let original = self.read_original(id, document.original)?;
+        correction.validate(&original.segments, original.duration_ms)?;
+        let previous: HashMap<_, _> = document.entries.iter()
+            .map(|entry| (entry.id.as_str(), entry.text.as_str())).collect();
+        for (index, entry) in correction.entries.iter().enumerate() {
+            if previous.get(entry.id.as_str()).copied() != Some(entry.text.as_str())
+                && (entry.text.trim().is_empty() || entry.text.len() > 64 * 1024) {
+                return Err(format!("第 {} 条字幕为空或超出长度限制", index + 1));
             }
         }
-        let original: HashMap<_, _> = self
-            .transcript(id)?
-            .segments
-            .into_iter()
-            .map(|s| (s.id, s.text))
-            .collect();
-        let corrections: HashMap<_, _> = segments
-            .iter()
-            .filter(|s| original.get(&s.id) != Some(&s.text))
-            .map(|s| (&s.id, &s.text))
-            .collect();
         let revision = Uuid::new_v4();
         let path = self.directory(id).join(format!("{revision}.json"));
-        atomic_write(&path, encode(&corrections)?.as_bytes())?;
+        atomic_write(&path, encode(&correction)?.as_bytes())?;
         let mut db = self.database()?;
         let tx = db.transaction().map_err(|e| e.to_string())?;
         let mut project = Self::load_project(&tx, id)?;
@@ -835,7 +960,9 @@ impl Workspace {
         Ok(Document {
             revision,
             original: document.original,
-            segments,
+            segments: correction.entries.iter().filter_map(Entry::timed).collect(),
+            entries: correction.entries,
+            review_groups: correction.review_groups,
             waveform_peaks: document.waveform_peaks,
         })
     }

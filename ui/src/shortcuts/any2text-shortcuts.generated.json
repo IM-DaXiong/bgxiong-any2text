@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "id": "any2text.previousSegment",
+      "defaultChord": {
+        "code": "ArrowUp",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "上一段",
+      "en": "Previous subtitle"
+    },
+    {
+      "id": "any2text.nextSegment",
+      "defaultChord": {
+        "code": "ArrowDown",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "下一段",
+      "en": "Next subtitle"
+    },
+    {
+      "id": "any2text.insertLineBreak",
+      "defaultChord": {
+        "code": "Enter",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "插入换行",
+      "en": "Insert line break"
+    },
+    {
+      "id": "any2text.splitAtCursor",
+      "defaultChord": {
+        "code": "Enter",
+        "shift": true,
+        "ctrl": true
+      },
+      "zh": "在光标处拆段",
+      "en": "Split at cursor"
+    },
+    {
+      "id": "any2text.mergePrevious",
+      "defaultChord": {
+        "code": "ArrowLeft",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "与上一段合并",
+      "en": "Merge with previous"
+    },
+    {
+      "id": "any2text.mergeNext",
+      "defaultChord": {
+        "code": "ArrowRight",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "与下一段合并",
+      "en": "Merge with next"
+    },
+    {
+      "id": "any2text.suggestBreaks",
+      "defaultChord": {
+        "code": "KeyA",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "自动整理",
+      "en": "Suggest subtitle breaks"
+    },
+    {
+      "id": "any2text.undoEdit",
+      "defaultChord": {
+        "code": "KeyZ",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "撤销",
+      "en": "Undo subtitle edit"
+    },
+    {
+      "id": "any2text.reviewCurrent",
+      "defaultChord": {
+        "code": "KeyR",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "复核当前段",
+      "en": "Review current subtitle"
+    },
+    {
+      "id": "any2text.reviewAll",
+      "defaultChord": {
+        "code": "KeyB",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "复核全部",
+      "en": "Review all subtitles"
+    },
+    {
+      "id": "any2text.confirmReview",
+      "defaultChord": {
+        "code": "KeyC",
+        "shift": true,
+        "alt": true
+      },
+      "zh": "确认时间",
+      "en": "Confirm timing"
+    }
+  ]
+}

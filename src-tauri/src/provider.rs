@@ -131,6 +131,7 @@ pub trait ServiceProvider: Send + Sync {
     async fn connect(&self) -> Result<Capabilities, String>;
     async fn health(&self) -> Result<(), String>;
     async fn prepare_input(&self, service_id: &str, path: &Path, report: ImportReporter) -> Result<Input, String>;
+    async fn shortcut_bindings(&self) -> Result<serde_json::Value, String> { Err("快捷键配置不可用".into()) }
     async fn appearance(&self) -> Result<Option<String>, String> { Ok(None) }
     async fn prepare_text(&self, service_id: &str, snapshot: Vec<u8>) -> Result<TextInput, String>;
     async fn submit(&self, service_id: &str, request: &Request) -> Result<Job, String>;

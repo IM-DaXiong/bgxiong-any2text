@@ -20,6 +20,7 @@ if ($source.Length -ne $receipt.bytes -or $hash -ne $receipt.sha256) {
     throw 'Component size or SHA256 does not match its receipt. Rebuild the component.'
 }
 $hostRoot = Join-Path (Split-Path -Parent $root) 'bgxiong-ai-story'
+& (Join-Path $hostRoot 'scripts/stage-any2text-component.ps1') -ArtifactDirectory $ArtifactDirectory -ValidateOnly
 foreach ($schema in @((Join-Path $root 'contracts/v1/service-provider.schema.json'),
     (Join-Path $hostRoot 'contracts/any2text/v1/service-provider.schema.json'))) {
     if ((Get-FileHash -LiteralPath $schema -Algorithm SHA256).Hash -ne $receipt.schemaSha256) {
